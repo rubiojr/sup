@@ -9,7 +9,7 @@ WhatsApp CLI and Bot framework.
 - List all WhatsApp groups and contacts
 - Send files, images and clipboard to individual users or groups
 - QR code authentication for WhatsApp Web
-- Bot framework
+- A sample but useful bot
 
 See [CLI.md](docs/CLI.md) and [BOT.md](docs/BOT.md) for CLI and bot usage.
 
