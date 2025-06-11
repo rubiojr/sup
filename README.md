@@ -47,7 +47,7 @@ sup send -t 15551234567 -m "Hello! How are you?"
 sup send -t 120363123456789@g.us -m "Hello everyone!" --group
 
 # Send an image to a contact
-sup send-file -t 15551234567 -f photo.jpg
+sup send-image -t 15551234567 -i photo.jpg
 
 # Send a PDF to a group
 sup send-file -t 120363123456789@g.us -f document.pdf --group
@@ -60,6 +60,10 @@ sup send-clipboard -t 15551234567
 
 # Send clipboard content to a group
 sup send-clipboard -t 120363123456789@g.us --group
+
+# Getting help
+sup help
+sup help <command>
 ```
 
 ## Notes
