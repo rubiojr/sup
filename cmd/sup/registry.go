@@ -96,7 +96,6 @@ This command generates:
 
 func registryIndexAction(ctx context.Context, c *cli.Command) error {
 	pluginsDir := c.Args().First()
-	baseURL := c.Args().Get(1)
 	outputDir := c.String("output")
 	if pluginsDir == "" {
 		pluginsDir = "."
@@ -118,11 +117,10 @@ func registryIndexAction(ctx context.Context, c *cli.Command) error {
 
 	fmt.Printf("Building registry index...\n")
 	fmt.Printf("  Plugins directory: %s\n", absPluginsDir)
-	fmt.Printf("  Base URL: %s\n", baseURL)
 	fmt.Printf("  Output directory: %s\n", absOutputDir)
 	fmt.Println()
 
-	builder := registry.NewBuilder(absPluginsDir, baseURL)
+	builder := registry.NewBuilder(absPluginsDir)
 
 	index, err := builder.BuildIndex()
 	if err != nil {

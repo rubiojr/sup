@@ -25,14 +25,12 @@ type PluginMetadata struct {
 
 type Builder struct {
 	baseDir    string
-	baseURL    string
 	pluginsDir string
 }
 
-func NewBuilder(baseDir, baseURL string) *Builder {
+func NewBuilder(baseDir string) *Builder {
 	return &Builder{
 		baseDir:    baseDir,
-		baseURL:    baseURL,
 		pluginsDir: filepath.Join(baseDir, "plugins"),
 	}
 }
