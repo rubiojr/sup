@@ -9,7 +9,7 @@ WhatsApp CLI and Bot framework.
 - List all WhatsApp groups and contacts
 - Send files, images and clipboard to individual users or groups
 - QR code authentication for WhatsApp Web
-- A sample but useful bot
+- A sample but useful bot extensible via plugins (https://sup-registry.rbel.co)
 
 See [CLI.md](docs/CLI.md) and [BOT.md](docs/BOT.md) for CLI and bot usage.
 
@@ -58,30 +58,21 @@ sup send-file -t 15551234567 -f archive.zip
 # Send clipboard content as a file to a contact
 sup send-clipboard -t 15551234567
 
-# Send clipboard content to a group
-sup send-clipboard -t 120363123456789@g.us --group
-
 # Plugin management
 # List available plugins from registry
 sup registry list
 
 # Download and install a plugin
-sup registry download weather
+sup registry install echo
 
 # Download specific version of a plugin
-sup registry download weather 1.0.0
+sup registry install echo 0.1.0
 
 # Remove an installed plugin
 sup plugins remove weather
 
 # List currently loaded plugins
 sup plugins list
-
-# Reload all plugins after installing/removing
-sup plugins reload
-
-# Build a plugin registry index from a directory structure
-sup registry index /path/to/plugins https://registry-url.com
 
 # Getting help
 sup help
