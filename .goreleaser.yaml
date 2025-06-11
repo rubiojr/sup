@@ -19,10 +19,23 @@ builds:
     goos:
       - linux
       - darwin
+    goarch:
+      - amd64
+      - arm
+      - arm64
     main: ./cmd/sup
+    ldflags:
+      - -s -w
+
+upx:
+  - enabled: true
+    goos: [linux, darwin]
+    compress: best
+    lzma: true
+    brute: true
 
 archives:
-  - formats: [ 'tar.gz' ]
+  - formats: ["tar.gz"]
     # this name template makes the OS and Arch compatible with the results of `uname`.
     name_template: >-
       {{ .ProjectName }}_
