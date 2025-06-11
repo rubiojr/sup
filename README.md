@@ -4,7 +4,7 @@ WhatsApp CLI and Bot framework.
 
 ## Features
 
-### A WhatsApp command line interface
+### WhatsApp command line interface
 
 - List all WhatsApp groups and contacts
 - Send files, images and clipboard to individual users or groups
@@ -13,7 +13,7 @@ WhatsApp CLI and Bot framework.
 
 See [CLI.md](docs/CLI.md) and [BOT.md](docs/BOT.md) for CLI and bot usage.
 
-### A WhatsApp bot with a pluggable architecture
+### WhatsApp bot with a pluggable architecture
 
 - Handlers: with full access to the operating system services, written in Go
 - Plugins: Sandboxed WASM modules can be developed in several languages (any language supported by [Extism](https://extism.org/docs/quickstart/plugin-quickstart)).
