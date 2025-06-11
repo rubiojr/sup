@@ -19,7 +19,7 @@ var registryCmd = &cli.Command{
 		{
 			Name:      "index",
 			Usage:     "Build registry index from plugins directory",
-			ArgsUsage: "<plugins-directory> <base-url>",
+			ArgsUsage: "<plugins-directory>",
 			Action:    registryIndexAction,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -89,13 +89,12 @@ This command generates:
 }
 
 func registryIndexAction(ctx context.Context, c *cli.Command) error {
-	if c.Args().Len() < 2 {
-		return fmt.Errorf("plugins directory and base URL are required")
-	}
-
 	pluginsDir := c.Args().First()
 	baseURL := c.Args().Get(1)
 	outputDir := c.String("output")
+	if pluginsDir == "" {
+		pluginsDir = "."
+	}
 
 	if _, err := os.Stat(pluginsDir); os.IsNotExist(err) {
 		return fmt.Errorf("plugins directory does not exist: %s", pluginsDir)
