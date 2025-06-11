@@ -105,7 +105,7 @@ func (b *Builder) processWasmFile(wasmPath string, index *Index) error {
 	hasher.Write(wasmData)
 	checksum := hex.EncodeToString(hasher.Sum(nil))
 
-	metadataPath := filepath.Join(filepath.Dir(wasmPath), "metadata.json")
+	metadataPath := filepath.Join(b.pluginsDir, pluginName, "metadata.json")
 	metadata, err := b.loadMetadata(metadataPath, pluginName)
 	if err != nil {
 		log.Warn("Failed to load metadata, using defaults", "path", metadataPath, "error", err)
@@ -123,12 +123,9 @@ func (b *Builder) processWasmFile(wasmPath string, index *Index) error {
 		}
 	}
 
-	downloadURL := fmt.Sprintf("%s/plugins/%s/%s/%s", b.baseURL, pluginName, version, filename)
-
 	versionInfo := &Version{
 		Version:     version,
 		ReleaseDate: stat.ModTime(),
-		DownloadURL: downloadURL,
 		SHA256:      checksum,
 		Size:        stat.Size(),
 	}

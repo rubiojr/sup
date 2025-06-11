@@ -45,7 +45,6 @@ func TestFetchIndex(t *testing.T) {
 					"1.0.0": {
 						Version:     "1.0.0",
 						ReleaseDate: time.Now(),
-						DownloadURL: "https://example.com/test-plugin.wasm",
 						SHA256:      "abcd1234",
 						Size:        1024,
 					},
@@ -86,13 +85,13 @@ func TestFetchIndex(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	
+
 	tempDir, err := os.MkdirTemp("", "sup-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	client.cacheDir = tempDir
 
 	fetchedIndex, err := client.FetchIndex()
@@ -135,10 +134,9 @@ func TestDownloadPlugin(t *testing.T) {
 				Latest: "1.0.0",
 				Versions: map[string]*Version{
 					"1.0.0": {
-						Version:     "1.0.0",
-						DownloadURL: "REPLACE_WITH_SERVER_URL/test-plugin.wasm",
-						SHA256:      pluginChecksum,
-						Size:        int64(len(pluginData)),
+						Version: "1.0.0",
+						SHA256:  pluginChecksum,
+						Size:    int64(len(pluginData)),
 					},
 				},
 			},
@@ -149,30 +147,26 @@ func TestDownloadPlugin(t *testing.T) {
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/index.json.gz":
-			index.Plugins["test-plugin"].Versions["1.0.0"].DownloadURL = server.URL + "/test-plugin.wasm"
-			
 			indexJSON, _ := json.Marshal(index)
 			var compressedIndex strings.Builder
 			gzipWriter := gzip.NewWriter(&compressedIndex)
 			gzipWriter.Write(indexJSON)
 			gzipWriter.Close()
-			
+
 			w.Header().Set("Content-Type", "application/gzip")
 			w.Write([]byte(compressedIndex.String()))
 		case "/index.json.gz.sha256":
-			index.Plugins["test-plugin"].Versions["1.0.0"].DownloadURL = server.URL + "/test-plugin.wasm"
-			
 			indexJSON, _ := json.Marshal(index)
 			var compressedIndex strings.Builder
 			gzipWriter := gzip.NewWriter(&compressedIndex)
 			gzipWriter.Write(indexJSON)
 			gzipWriter.Close()
-			
+
 			hasher := sha256.New()
 			hasher.Write([]byte(compressedIndex.String()))
 			checksum := hex.EncodeToString(hasher.Sum(nil))
 			fmt.Fprintf(w, "%s  index.json.gz", checksum)
-		case "/test-plugin.wasm":
+		case "/plugins/test-plugin/1.0.0/test-plugin.wasm":
 			w.Header().Set("Content-Type", "application/wasm")
 			w.Write(pluginData)
 		default:
@@ -182,17 +176,17 @@ func TestDownloadPlugin(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	
+
 	tempDir, err := os.MkdirTemp("", "sup-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	client.cacheDir = tempDir
 
 	targetDir := filepath.Join(tempDir, "plugins")
-	
+
 	err = client.DownloadPlugin("test-plugin", "", targetDir)
 	if err != nil {
 		t.Fatalf("DownloadPlugin failed: %v", err)
@@ -227,7 +221,7 @@ func TestDownloadPluginNotFound(t *testing.T) {
 			gzipWriter := gzip.NewWriter(&compressedIndex)
 			gzipWriter.Write(indexJSON)
 			gzipWriter.Close()
-			
+
 			w.Header().Set("Content-Type", "application/gzip")
 			w.Write([]byte(compressedIndex.String()))
 		case "/index.json.gz.sha256":
@@ -236,7 +230,7 @@ func TestDownloadPluginNotFound(t *testing.T) {
 			gzipWriter := gzip.NewWriter(&compressedIndex)
 			gzipWriter.Write(indexJSON)
 			gzipWriter.Close()
-			
+
 			hasher := sha256.New()
 			hasher.Write([]byte(compressedIndex.String()))
 			checksum := hex.EncodeToString(hasher.Sum(nil))
@@ -248,13 +242,13 @@ func TestDownloadPluginNotFound(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	
+
 	tempDir, err := os.MkdirTemp("", "sup-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	client.cacheDir = tempDir
 
 	err = client.DownloadPlugin("nonexistent-plugin", "", tempDir)
@@ -271,16 +265,16 @@ func TestDownloadPluginNotFound(t *testing.T) {
 func TestVerifyChecksum(t *testing.T) {
 	client := NewClient("")
 	data := []byte("test data")
-	
+
 	hasher := sha256.New()
 	hasher.Write(data)
 	correctChecksum := hex.EncodeToString(hasher.Sum(nil))
-	
+
 	err := client.verifyChecksum(data, correctChecksum)
 	if err != nil {
 		t.Errorf("Expected checksum verification to pass, got error: %v", err)
 	}
-	
+
 	err = client.verifyChecksum(data, "wrong_checksum")
 	if err == nil {
 		t.Error("Expected checksum verification to fail with wrong checksum")
@@ -324,7 +318,7 @@ func TestListPlugins(t *testing.T) {
 			gzipWriter := gzip.NewWriter(&compressedIndex)
 			gzipWriter.Write(indexJSON)
 			gzipWriter.Close()
-			
+
 			w.Header().Set("Content-Type", "application/gzip")
 			w.Write([]byte(compressedIndex.String()))
 		case "/index.json.gz.sha256":
@@ -333,7 +327,7 @@ func TestListPlugins(t *testing.T) {
 			gzipWriter := gzip.NewWriter(&compressedIndex)
 			gzipWriter.Write(indexJSON)
 			gzipWriter.Close()
-			
+
 			hasher := sha256.New()
 			hasher.Write([]byte(compressedIndex.String()))
 			checksum := hex.EncodeToString(hasher.Sum(nil))
@@ -345,13 +339,13 @@ func TestListPlugins(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	
+
 	tempDir, err := os.MkdirTemp("", "sup-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	client.cacheDir = tempDir
 
 	plugins, err := client.ListPlugins()

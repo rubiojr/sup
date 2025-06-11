@@ -37,16 +37,15 @@ var registryCmd = &cli.Command{
 The plugins directory should be organized as:
   plugins/
   ├── plugin-name/
+  │   ├── metadata.json (optional)
   │   ├── version/
-  │   │   ├── plugin-name.wasm
-  │   │   └── metadata.json (optional)
+  │   │   └── plugin-name.wasm
   │   └── another-version/
-  │       ├── plugin-name.wasm
-  │       └── metadata.json (optional)
+  │       └── plugin-name.wasm
   └── another-plugin/
+      ├── metadata.json (optional)
       └── version/
-          ├── another-plugin.wasm
-          └── metadata.json (optional)
+          └── another-plugin.wasm
 
 This command generates:
 - index.json (uncompressed for debugging)

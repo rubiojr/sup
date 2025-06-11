@@ -19,9 +19,9 @@ import (
 
 const (
 	DefaultRegistryURL = "https://sup-registry.rbel.co"
-	IndexFile         = "index.json.gz"
-	IndexChecksumFile = "index.json.gz.sha256"
-	UserAgent         = "sup-cli/1.0"
+	IndexFile          = "index.json.gz"
+	IndexChecksumFile  = "index.json.gz.sha256"
+	UserAgent          = "sup-cli/1.0"
 )
 
 type Client struct {
@@ -115,9 +115,12 @@ func (c *Client) DownloadPlugin(pluginName, version string, targetDir string) er
 		return fmt.Errorf("version '%s' not found for plugin '%s'", version, pluginName)
 	}
 
-	log.Debug("Downloading plugin", "name", pluginName, "version", version, "url", versionInfo.DownloadURL)
+	log.Debug("Downloading plugin", "name", pluginName, "version", version)
 
-	pluginData, err := c.fetchFile(versionInfo.DownloadURL)
+	downloadURL := c.constructDownloadURL(pluginName, version)
+	fmt.Printf("Fetching plugin from URL: %s\n", downloadURL)
+
+	pluginData, err := c.fetchFile(downloadURL)
 	if err != nil {
 		return fmt.Errorf("failed to download plugin: %w", err)
 	}
@@ -142,16 +145,20 @@ func (c *Client) DownloadPlugin(pluginName, version string, targetDir string) er
 func compressData(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buf)
-	
+
 	if _, err := gzipWriter.Write(data); err != nil {
 		return nil, fmt.Errorf("failed to write to gzip writer: %w", err)
 	}
-	
+
 	if err := gzipWriter.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
 	}
-	
+
 	return buf.Bytes(), nil
+}
+
+func (c *Client) constructDownloadURL(pluginName, version string) string {
+	return fmt.Sprintf("%s/plugins/%s/%s/%s.wasm", c.registryURL, pluginName, version, pluginName)
 }
 
 func (c *Client) ListPlugins() ([]PluginInfo, error) {

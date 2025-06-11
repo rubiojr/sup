@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"github.com/rubiojr/sup/bot"
 	"github.com/rubiojr/sup/bot/handlers"
 	"github.com/urfave/cli/v3"
+	"os"
+	"path/filepath"
 )
 
 var pluginsCmd = &cli.Command{

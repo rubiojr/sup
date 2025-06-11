@@ -24,7 +24,6 @@ The plugin registry uses a compressed JSON index file (`index.json.gz`) that con
         "1.0.0": {
           "version": "1.0.0",
           "release_date": "2024-01-15T10:30:00Z",
-          "download_url": "https://sup-registry.rbel.co/plugins/plugin-name/1.0.0/plugin-name.wasm",
           "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
           "size": 1024000,
           "min_sup_version": "0.1.0"
@@ -32,7 +31,6 @@ The plugin registry uses a compressed JSON index file (`index.json.gz`) that con
         "1.1.0": {
           "version": "1.1.0",
           "release_date": "2024-01-20T14:15:00Z",
-          "download_url": "https://sup-registry.rbel.co/plugins/plugin-name/1.1.0/plugin-name.wasm",
           "sha256": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
           "size": 1056000,
           "min_sup_version": "0.1.0"
@@ -67,7 +65,6 @@ The plugin registry uses a compressed JSON index file (`index.json.gz`) that con
 
 - `version`: Semantic version string for this release
 - `release_date`: ISO 8601 timestamp of when this version was released
-- `download_url`: Direct URL to download the WASM plugin file
 - `sha256`: SHA256 checksum of the plugin file for integrity verification
 - `size`: Size of the plugin file in bytes
 - `min_sup_version`: Minimum version of sup required to run this plugin (optional)
@@ -90,7 +87,6 @@ The plugin registry uses a compressed JSON index file (`index.json.gz`) that con
         "1.0.0": {
           "version": "1.0.0",
           "release_date": "2024-01-15T10:30:00Z",
-          "download_url": "https://sup-registry.rbel.co/plugins/weather/1.0.0/weather.wasm",
           "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
           "size": 524288,
           "min_sup_version": "0.1.0"
@@ -98,7 +94,6 @@ The plugin registry uses a compressed JSON index file (`index.json.gz`) that con
         "1.1.0": {
           "version": "1.1.0",
           "release_date": "2024-01-20T14:15:00Z",
-          "download_url": "https://sup-registry.rbel.co/plugins/weather/1.1.0/weather.wasm",
           "sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
           "size": 548864,
           "min_sup_version": "0.1.0"
@@ -117,7 +112,6 @@ The plugin registry uses a compressed JSON index file (`index.json.gz`) that con
         "0.9.0": {
           "version": "0.9.0",
           "release_date": "2024-01-10T09:00:00Z",
-          "download_url": "https://sup-registry.rbel.co/plugins/jokes/0.9.0/jokes.wasm",
           "sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
           "size": 327680,
           "min_sup_version": "0.1.0"
@@ -133,9 +127,11 @@ The plugin registry uses a compressed JSON index file (`index.json.gz`) that con
 
 The registry follows this URL pattern:
 
-- Index file: `https://sup-registry.rbel.co/index.json.gz`
-- Index checksum: `https://sup-registry.rbel.co/index.json.gz.sha256`
-- Plugin files: `https://sup-registry.rbel.co/plugins/{plugin-name}/{version}/{plugin-name}.wasm`
+- Index file: `{registry-url}/index.json.gz`
+- Index checksum: `{registry-url}/index.json.gz.sha256`
+- Plugin files: `{registry-url}/plugins/{plugin-name}/{version}/{plugin-name}.wasm`
+
+Download URLs are constructed dynamically based on the registry URL specified in commands, allowing the same index to work with different registry hosts.
 
 ## CLI Usage
 
@@ -169,16 +165,15 @@ The command expects plugins to be organized as follows:
 ```
 plugins/
 ├── plugin-name/
+│   ├── metadata.json (optional)
 │   ├── version/
-│   │   ├── plugin-name.wasm
-│   │   └── metadata.json (optional)
+│   │   └── plugin-name.wasm
 │   └── another-version/
-│       ├── plugin-name.wasm
-│       └── metadata.json (optional)
+│       └── plugin-name.wasm
 └── another-plugin/
+    ├── metadata.json (optional)
     └── version/
-        ├── another-plugin.wasm
-        └── metadata.json (optional)
+        └── another-plugin.wasm
 ```
 
 ### Metadata Files
@@ -222,7 +217,7 @@ This generates:
 # Create a test registry structure
 mkdir -p registry/plugins/weather/1.0.0
 echo "fake weather plugin data" > registry/plugins/weather/1.0.0/weather.wasm
-echo '{"name":"weather","description":"Weather forecasts","author":"WeatherBot"}' > registry/plugins/weather/1.0.0/metadata.json
+echo '{"name":"weather","description":"Weather forecasts","author":"WeatherBot"}' > registry/plugins/weather/metadata.json
 
 # Build the index
 sup registry index registry https://sup-registry.rbel.co --output dist --verbose
