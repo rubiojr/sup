@@ -45,6 +45,7 @@ type Plugin interface {
 	HandleMessage(input Input) Output
 	GetHelp() HelpOutput
 	GetRequiredEnvVars() []string
+	Version() string
 }
 
 // Global plugin instance
@@ -58,6 +59,7 @@ func RegisterPlugin(p Plugin) {
 
 // handle_message is the exported function that Extism calls
 // Plugin authors don't need to implement this directly
+//
 //export handle_message
 func handle_message() int32 {
 	if pluginInstance == nil {
@@ -66,7 +68,7 @@ func handle_message() int32 {
 	}
 
 	input := pdk.Input()
-	
+
 	var req Input
 	if err := json.Unmarshal(input, &req); err != nil {
 		pdk.OutputString(fmt.Sprintf(`{"success":false,"error":"Failed to parse input: %v"}`, err))
@@ -74,19 +76,20 @@ func handle_message() int32 {
 	}
 
 	output := pluginInstance.HandleMessage(req)
-	
+
 	outputData, err := json.Marshal(output)
 	if err != nil {
 		pdk.OutputString(fmt.Sprintf(`{"success":false,"error":"Failed to marshal output: %v"}`, err))
 		return 1
 	}
-	
+
 	pdk.OutputString(string(outputData))
 	return 0
 }
 
 // get_help is the exported function that Extism calls for help
 // Plugin authors don't need to implement this directly
+//
 //export get_help
 func get_help() int32 {
 	if pluginInstance == nil {
@@ -95,19 +98,20 @@ func get_help() int32 {
 	}
 
 	help := pluginInstance.GetHelp()
-	
+
 	helpData, err := json.Marshal(help)
 	if err != nil {
 		pdk.OutputString(fmt.Sprintf(`{"success":false,"error":"Failed to marshal help: %v"}`, err))
 		return 1
 	}
-	
+
 	pdk.OutputString(string(helpData))
 	return 0
 }
 
 // get_required_env_vars is the exported function that Extism calls to get required environment variables
 // Plugin authors don't need to implement this directly
+//
 //export get_required_env_vars
 func get_required_env_vars() int32 {
 	if pluginInstance == nil {
@@ -116,19 +120,20 @@ func get_required_env_vars() int32 {
 	}
 
 	envVars := pluginInstance.GetRequiredEnvVars()
-	
+
 	envData, err := json.Marshal(envVars)
 	if err != nil {
 		pdk.OutputString(fmt.Sprintf(`{"error":"Failed to marshal env vars: %v"}`, err))
 		return 1
 	}
-	
+
 	pdk.OutputString(string(envData))
 	return 0
 }
 
 // get_name is the exported function that Extism calls to get the plugin name
 // Plugin authors don't need to implement this directly
+//
 //export get_name
 func get_name() int32 {
 	if pluginInstance == nil {
@@ -143,6 +148,7 @@ func get_name() int32 {
 
 // get_topics is the exported function that Extism calls to get the plugin topics
 // Plugin authors don't need to implement this directly
+//
 //export get_topics
 func get_topics() int32 {
 	if pluginInstance == nil {
@@ -151,13 +157,13 @@ func get_topics() int32 {
 	}
 
 	topics := pluginInstance.Topics()
-	
+
 	topicsData, err := json.Marshal(topics)
 	if err != nil {
 		pdk.OutputString(fmt.Sprintf(`{"error":"Failed to marshal topics: %v"}`, err))
 		return 1
 	}
-	
+
 	pdk.OutputString(string(topicsData))
 	return 0
 }
@@ -212,16 +218,16 @@ func hostListDirectory(pathPtr uint64) uint64
 func ReadFile(path string) ([]byte, error) {
 	// Allocate memory for the path string
 	pathMem := pdk.AllocateString(path)
-	
+
 	// Call the host function
 	resultMem := hostReadFile(pathMem.Offset())
-	
+
 	// Read the result
 	data := pdk.FindMemory(resultMem)
 	if data.Length() == 0 {
 		return nil, fmt.Errorf("failed to read file %s", path)
 	}
-	
+
 	return data.ReadBytes(), nil
 }
 
@@ -229,24 +235,24 @@ func ReadFile(path string) ([]byte, error) {
 func SendImage(recipient, imagePath string) error {
 	// Create the request data
 	request := map[string]string{
-		"recipient":   recipient,
+		"recipient":  recipient,
 		"image_path": imagePath,
 	}
-	
+
 	requestData, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("failed to marshal send image request: %w", err)
 	}
-	
+
 	// Allocate memory for the request data
 	dataMem := pdk.AllocateBytes(requestData)
-	
+
 	// Call the host function
 	result := hostSendImage(dataMem.Offset())
 	if result != 0 {
 		return fmt.Errorf("failed to send image, error code: %d", result)
 	}
-	
+
 	return nil
 }
 
@@ -261,27 +267,26 @@ type ListDirectoryResponse struct {
 func ListDirectory(path string) ([]string, error) {
 	// Allocate memory for the path string
 	pathMem := pdk.AllocateString(path)
-	
+
 	// Call the host function
 	resultMem := hostListDirectory(pathMem.Offset())
-	
+
 	// Read the result
 	data := pdk.FindMemory(resultMem)
 	if data.Length() == 0 {
 		return nil, fmt.Errorf("failed to list directory %s", path)
 	}
-	
+
 	// Parse the JSON response
 	var response ListDirectoryResponse
 	err := json.Unmarshal(data.ReadBytes(), &response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse directory listing response: %w", err)
 	}
-	
+
 	if !response.Success {
 		return nil, fmt.Errorf("directory listing failed: %s", response.Error)
 	}
-	
+
 	return response.Files, nil
 }
-
