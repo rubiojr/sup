@@ -5,6 +5,9 @@
 sup is a WhatsApp CLI and bot framework.
 It's extensible via plugins in /plugins and handlers in internal/bot/handlers/.
 
+README.md gives an overview of the project.
+The docs/ directory contains additional documentation, including plugin and handler development documentation.
+
 ## Rules
 
 When writing code:
