@@ -13,6 +13,7 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/rubiojr/sup/internal/client"
 	"github.com/rubiojr/sup/internal/log"
 )
@@ -446,4 +447,8 @@ func (i *ImageDownloaderHandler) GetHelp() handlers.HandlerHelp {
 		},
 		Category: "utility",
 	}
+}
+
+func (i *ImageDownloaderHandler) Version() string {
+	return version.String
 }

@@ -9,6 +9,7 @@ type Handler interface {
 	GetHelp() HandlerHelp
 	Name() string
 	Topics() []string
+	Version() string
 }
 
 type HandlerHelp struct {

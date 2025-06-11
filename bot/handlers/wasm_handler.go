@@ -577,6 +577,18 @@ func (w *WasmHandler) Close() error {
 	return nil
 }
 
+// Version returns the version of the WASM plugin
+func (w *WasmHandler) Version() string {
+	exit, outputData, err := w.plugin.Call("get_version", []byte{})
+	if err != nil {
+		return "unknown"
+	}
+	if exit != 0 {
+		return "unknown"
+	}
+	return string(outputData)
+}
+
 // getRequiredEnvVars queries a WASM plugin for its required environment variables
 func getRequiredEnvVars(plugin *extism.Plugin) ([]string, error) {
 	exit, outputData, err := plugin.Call("get_required_env_vars", []byte{})
