@@ -141,26 +141,26 @@ The registry follows this URL pattern:
 
 ### List Available Plugins
 ```bash
-sup plugins plugin-list
-sup plugins plugin-list --installed-only
-sup plugins plugin-list --available-only
+sup registry list
+sup registry list --installed-only
+sup registry list --available-only
 ```
 
 ### Download and Install Plugin
 ```bash
-sup plugins plugin-download weather
-sup plugins plugin-download weather 1.0.0
-sup plugins plugin-download jokes --registry https://custom-registry.example.com
+sup registry download weather
+sup registry download weather 1.0.0
+sup registry download jokes --registry https://custom-registry.example.com
 ```
 
 ### Remove Plugin
 ```bash
-sup plugins plugin-remove weather
+sup plugins remove weather
 ```
 
 ## Building a Registry Index
 
-The `sup index-registry` command can be used to build registry index files from a directory structure containing plugins.
+The `sup registry index` command can be used to build registry index files from a directory structure containing plugins.
 
 ### Directory Structure
 
@@ -202,13 +202,13 @@ If no metadata file is provided, default values will be used.
 
 ```bash
 # Build index from plugins directory
-sup index-registry /path/to/plugins https://sup-registry.rbel.co
+sup registry index /path/to/plugins https://sup-registry.rbel.co
 
 # Specify output directory
-sup index-registry /path/to/plugins https://sup-registry.rbel.co --output /path/to/output
+sup registry index /path/to/plugins https://sup-registry.rbel.co --output /path/to/output
 
 # Enable verbose output
-sup index-registry /path/to/plugins https://sup-registry.rbel.co --verbose
+sup registry index /path/to/plugins https://sup-registry.rbel.co --verbose
 ```
 
 This generates:
@@ -225,7 +225,7 @@ echo "fake weather plugin data" > registry/plugins/weather/1.0.0/weather.wasm
 echo '{"name":"weather","description":"Weather forecasts","author":"WeatherBot"}' > registry/plugins/weather/1.0.0/metadata.json
 
 # Build the index
-sup index-registry registry https://sup-registry.rbel.co --output dist --verbose
+sup registry index registry https://sup-registry.rbel.co --output dist --verbose
 ```
 
 ## Security Considerations

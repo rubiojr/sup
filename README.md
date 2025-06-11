@@ -63,16 +63,16 @@ sup send-clipboard -t 120363123456789@g.us --group
 
 # Plugin management
 # List available plugins from registry
-sup plugins plugin-list
+sup registry list
 
 # Download and install a plugin
-sup plugins plugin-download weather
+sup registry download weather
 
 # Download specific version of a plugin
-sup plugins plugin-download weather 1.0.0
+sup registry download weather 1.0.0
 
 # Remove an installed plugin
-sup plugins plugin-remove weather
+sup plugins remove weather
 
 # List currently loaded plugins
 sup plugins list
@@ -81,7 +81,7 @@ sup plugins list
 sup plugins reload
 
 # Build a plugin registry index from a directory structure
-sup index-registry /path/to/plugins https://registry-url.com
+sup registry index /path/to/plugins https://registry-url.com
 
 # Getting help
 sup help
