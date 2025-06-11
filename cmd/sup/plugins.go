@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/rubiojr/sup/bot"
 	"github.com/rubiojr/sup/bot/handlers"
 	"github.com/urfave/cli/v3"
-	"os"
-	"path/filepath"
 )
 
 var pluginsCmd = &cli.Command{
@@ -210,7 +211,6 @@ func pluginRemoveAction(ctx context.Context, c *cli.Command) error {
 	}
 
 	fmt.Printf("Successfully removed plugin '%s'\n", pluginName)
-	fmt.Println("Run 'sup plugins reload' to unload the plugin from memory.")
 
 	return nil
 }
