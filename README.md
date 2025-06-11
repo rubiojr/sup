@@ -18,7 +18,7 @@ See [CLI.md](docs/CLI.md) and [BOT.md](docs/BOT.md) for CLI and bot usage.
 - Handlers: with full access to the operating system services, written in Go
 - Plugins: Sandboxed WASM modules can be developed in several languages (any language supported by [Extism](https://extism.org/docs/quickstart/plugin-quickstart)).
 
-See [PLUGINS.md](docs/PLUGINS.md) to create your own plugins.
+See [PLUGINS.md](docs/PLUGINS.md) to create your own plugins, and [HANDLERS.md](docs/HANDLERS.md) to create your own handlers.
 
 ## Quick Start
 
