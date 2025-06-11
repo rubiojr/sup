@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/rubiojr/sup/internal/log"
 	"github.com/rubiojr/sup/internal/registry"
 	"github.com/urfave/cli/v3"
 )
@@ -73,7 +75,7 @@ This command generates:
 			},
 		},
 		{
-			Name:      "download",
+			Name:      "install",
 			Usage:     "Download and install a plugin from the registry",
 			ArgsUsage: "<plugin-name> [version]",
 			Action:    registryDownloadAction,
@@ -82,6 +84,10 @@ This command generates:
 					Name:  "registry",
 					Usage: "Registry URL",
 					Value: registry.DefaultRegistryURL,
+				},
+				&cli.BoolFlag{
+					Name:  "debug",
+					Usage: "Enable debugging",
 				},
 			},
 		},
@@ -220,6 +226,10 @@ func registryDownloadAction(ctx context.Context, c *cli.Command) error {
 		return fmt.Errorf("plugin name required")
 	}
 
+	if c.Bool("debug") {
+		log.SetLevel(slog.LevelDebug)
+	}
+
 	pluginName := c.Args().First()
 	version := ""
 	if c.Args().Len() > 1 {
@@ -231,18 +241,19 @@ func registryDownloadAction(ctx context.Context, c *cli.Command) error {
 
 	targetDir := getDefaultPluginDir()
 
-	fmt.Printf("Downloading plugin '%s'", pluginName)
+	fmt.Println("Downloading plugin...")
 	if version != "" && version != "latest" {
 		fmt.Printf(" version %s", version)
 	}
-	fmt.Printf(" from %s...\n", registryURL)
+	log.Debug("Downloading plugin", "name", pluginName, "version", version)
+	log.Debug("Registry", "registry", registryURL)
+	log.Debug("Target directory", "directory", targetDir)
 
 	if err := client.DownloadPlugin(pluginName, version, targetDir); err != nil {
 		return fmt.Errorf("failed to download plugin: %w", err)
 	}
 
-	fmt.Printf("Successfully downloaded and installed plugin '%s' to %s\n", pluginName, targetDir)
-	fmt.Println("Run 'sup plugins reload' to load the new plugin.")
+	fmt.Println("Successfully downloaded and installed plugin!")
 
 	return nil
 }

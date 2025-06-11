@@ -118,7 +118,7 @@ func (c *Client) DownloadPlugin(pluginName, version string, targetDir string) er
 	log.Debug("Downloading plugin", "name", pluginName, "version", version)
 
 	downloadURL := c.constructDownloadURL(pluginName, version)
-	fmt.Printf("Fetching plugin from URL: %s\n", downloadURL)
+	log.Debug("Fetching plugin from URL", "url", downloadURL)
 
 	pluginData, err := c.fetchFile(downloadURL)
 	if err != nil {
