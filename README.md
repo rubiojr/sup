@@ -40,13 +40,13 @@ sup list-groups
 # List contacts to find phone numbers
 sup list-contacts
 
-# Send a text message to a contact
+# Send a text message to a contact (country code without '+' plus the contact number)
 sup send -t 15551234567 -m "Hello! How are you?"
 
 # Send a text message to a group (group contacts end with @g.us or similar)
 sup send -t 120363123456789@g.us -m "Hello everyone!" --group
 
-# Send an image to a contact (country code without '+' plus the contact number)
+# Send an image to a contact
 sup send-file -t 15551234567 -f photo.jpg
 
 # Send a PDF to a group
