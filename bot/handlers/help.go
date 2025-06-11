@@ -6,6 +6,7 @@ import (
 
 	"go.mau.fi/whatsmeow/types/events"
 
+	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/rubiojr/sup/internal/client"
 )
 
@@ -194,4 +195,8 @@ func capitalizeFirst(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func (h *HelpHandler) Version() string {
+	return version.String
 }

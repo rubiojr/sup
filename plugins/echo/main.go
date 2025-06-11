@@ -104,6 +104,11 @@ func (e *EchoPlugin) GetRequiredEnvVars() []string {
 	return []string{}
 }
 
+// Version returns the version of this plugin
+func (e *EchoPlugin) Version() string {
+	return "0.1.0"
+}
+
 func init() {
 	// Register our plugin with the framework
 	plugin.RegisterPlugin(&EchoPlugin{})

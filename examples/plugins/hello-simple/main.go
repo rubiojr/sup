@@ -9,6 +9,16 @@ import (
 // HelloPlugin implements the plugin.Plugin interface
 type HelloPlugin struct{}
 
+// Name returns the name of the plugin
+func (h *HelloPlugin) Name() string {
+	return "hello"
+}
+
+// Topics returns the topics this plugin should receive messages for
+func (h *HelloPlugin) Topics() []string {
+	return []string{"hello"}
+}
+
 // HandleMessage processes incoming messages
 func (h *HelloPlugin) HandleMessage(input plugin.Input) plugin.Output {
 	if input.Message == "" {
@@ -31,6 +41,11 @@ func (h *HelloPlugin) GetHelp() plugin.HelpOutput {
 
 func (h *HelloPlugin) GetRequiredEnvVars() []string {
 	return []string{}
+}
+
+// Version returns the version of this plugin
+func (h *HelloPlugin) Version() string {
+	return "0.1.0"
 }
 
 func init() {

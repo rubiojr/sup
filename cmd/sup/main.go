@@ -23,6 +23,7 @@ func main() {
 			sendClipboardCmd,
 			botCmd,
 			pluginsCmd,
+			registryCmd,
 			versionCmd,
 		},
 	}

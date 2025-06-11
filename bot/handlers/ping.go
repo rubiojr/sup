@@ -5,6 +5,7 @@ import (
 
 	"go.mau.fi/whatsmeow/types/events"
 
+	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/rubiojr/sup/internal/client"
 )
 
@@ -38,4 +39,8 @@ func (h *PingHandler) GetHelp() HandlerHelp {
 		Examples:    []string{".sup ping"},
 		Category:    "basic",
 	}
+}
+
+func (h *PingHandler) Version() string {
+	return version.String
 }

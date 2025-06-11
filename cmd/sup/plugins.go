@@ -42,6 +42,12 @@ var pluginsCmd = &cli.Command{
 			Usage:  "Show plugin information",
 			Action: pluginInfoAction,
 		},
+		{
+			Name:      "remove",
+			Usage:     "Remove an installed plugin",
+			ArgsUsage: "<plugin-name>",
+			Action:    pluginRemoveAction,
+		},
 	},
 }
 
@@ -69,8 +75,9 @@ func listPluginsAction(ctx context.Context, c *cli.Command) error {
 	}
 
 	fmt.Printf("Built-in Handlers (%d):\n", len(builtinHandlers))
-	for name := range builtinHandlers {
-		fmt.Printf("  %-15s\n", name)
+	for name, handler := range builtinHandlers {
+		version := handler.Version()
+		fmt.Printf("  %-15s %-10s\n", name, version)
 	}
 
 	fmt.Printf("\nWASM Plugin Handlers (%d):\n", len(pluginHandlers))
@@ -78,8 +85,9 @@ func listPluginsAction(ctx context.Context, c *cli.Command) error {
 		fmt.Println("  No WASM plugins loaded")
 		fmt.Printf("  Plugin directory: %s\n", getDefaultPluginDir())
 	} else {
-		for name := range pluginHandlers {
-			fmt.Printf("  %-15s\n", name)
+		for name, handler := range pluginHandlers {
+			version := handler.Version()
+			fmt.Printf("  %-15s %-10s\n", name, version)
 		}
 	}
 
@@ -106,7 +114,8 @@ func loadPluginsAction(ctx context.Context, c *cli.Command) error {
 	fmt.Printf("Successfully loaded %d plugin(s):\n", len(plugins))
 	for name, plugin := range plugins {
 		help := plugin.GetHelp()
-		fmt.Printf("  %-15s - %s\n", name, help.Description)
+		version := plugin.Version()
+		fmt.Printf("  %-15s %-10s - %s\n", name, version, help.Description)
 	}
 
 	return nil
@@ -127,7 +136,8 @@ func reloadPluginsAction(ctx context.Context, c *cli.Command) error {
 	fmt.Printf("Successfully reloaded %d plugin(s)\n", len(plugins))
 	for name, plugin := range plugins {
 		help := plugin.GetHelp()
-		fmt.Printf("  %-15s - %s\n", name, help.Description)
+		version := plugin.Version()
+		fmt.Printf("  %-15s %-10s - %s\n", name, version, help.Description)
 	}
 
 	return nil
@@ -163,6 +173,7 @@ func pluginInfoAction(ctx context.Context, c *cli.Command) error {
 
 	fmt.Printf("Plugin Information: %s\n", pluginName)
 	fmt.Printf("Type:        %s\n", pluginType)
+	fmt.Printf("Version:     %s\n", handler.Version())
 	fmt.Printf("Description: %s\n", help.Description)
 	fmt.Printf("Usage:       %s\n", help.Usage)
 	fmt.Printf("Category:    %s\n", help.Category)
@@ -183,4 +194,28 @@ func getDefaultPluginDir() string {
 		return "~/.local/share/sup/plugins"
 	}
 	return filepath.Join(homeDir, ".local", "share", "sup", "plugins")
+}
+
+func pluginRemoveAction(ctx context.Context, c *cli.Command) error {
+	if c.Args().Len() == 0 {
+		return fmt.Errorf("plugin name required")
+	}
+
+	pluginName := c.Args().First()
+	pluginDir := getDefaultPluginDir()
+	pluginPath := filepath.Join(pluginDir, fmt.Sprintf("%s.wasm", pluginName))
+
+	if _, err := os.Stat(pluginPath); os.IsNotExist(err) {
+		return fmt.Errorf("plugin '%s' is not installed", pluginName)
+	}
+
+	fmt.Printf("Removing plugin '%s'...\n", pluginName)
+
+	if err := os.Remove(pluginPath); err != nil {
+		return fmt.Errorf("failed to remove plugin file: %w", err)
+	}
+
+	fmt.Printf("Successfully removed plugin '%s'\n", pluginName)
+
+	return nil
 }

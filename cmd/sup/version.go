@@ -6,11 +6,8 @@ import (
 	"runtime"
 	"runtime/debug"
 
+	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/urfave/cli/v3"
-)
-
-var (
-	Version = "0.1.2"
 )
 
 var versionCmd = &cli.Command{
@@ -22,7 +19,7 @@ var versionCmd = &cli.Command{
 
 func versionCommand(ctx context.Context, cmd *cli.Command) error {
 	buildDate := getBuildDate()
-	fmt.Printf("sup version %s\n", Version)
+	fmt.Printf("sup version %s\n", version.String)
 	fmt.Printf("Build date: %s\n", buildDate)
 	fmt.Printf("Go version: %s\n", runtime.Version())
 	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)

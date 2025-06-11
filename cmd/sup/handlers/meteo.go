@@ -9,6 +9,7 @@ import (
 
 	"github.com/rubiojr/aemet-go"
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/rubiojr/sup/internal/client"
 )
 
@@ -214,4 +215,8 @@ func (h *MeteoHandler) GetHelp() handlers.HandlerHelp {
 		Examples:    []string{".sup meteo barcelona", ".sup meteo madrid"},
 		Category:    "utility",
 	}
+}
+
+func (h *MeteoHandler) Version() string {
+	return version.String
 }

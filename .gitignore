@@ -1,3 +1,4 @@
 *.wasm
 .zig-cache
 bin/
+/registry/

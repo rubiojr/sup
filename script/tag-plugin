@@ -1,0 +1,65 @@
+#!/bin/bash
+
+set -e
+
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <version> <plugin-name>"
+    echo "Example: $0 1.0.0 echo"
+    exit 1
+fi
+
+VERSION="$1"
+PLUGIN_NAME="$2"
+
+if [ -z "$VERSION" ] || [ -z "$PLUGIN_NAME" ]; then
+    echo "Error: Both version and plugin name must be provided"
+    exit 1
+fi
+
+SEMVER_REGEX='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+if ! [[ $VERSION =~ $SEMVER_REGEX ]]; then
+    echo "Error: Version '$VERSION' is not a valid semantic version"
+    echo "Expected format: MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]"
+    echo "Examples: 1.0.0, 1.2.3-alpha, 1.0.0-beta.1, 1.0.0+build.1"
+    exit 1
+fi
+
+PLUGIN_DIR="plugins/$PLUGIN_NAME"
+REGISTRY_DIR="registry/plugins/$PLUGIN_NAME/$VERSION"
+TAG_NAME="v$VERSION-$PLUGIN_NAME"
+
+if [ ! -d "$PLUGIN_DIR" ]; then
+    echo "Error: Plugin directory '$PLUGIN_DIR' does not exist"
+    exit 1
+fi
+
+if [ ! -f "$PLUGIN_DIR/Makefile" ]; then
+    echo "Error: No Makefile found in '$PLUGIN_DIR'"
+    exit 1
+fi
+
+echo "Tagging plugin '$PLUGIN_NAME' with version '$VERSION'"
+
+echo "Creating git tag '$TAG_NAME'..."
+git tag "$TAG_NAME"
+
+echo "Building plugin..."
+cd "$PLUGIN_DIR"
+make build
+cd - > /dev/null
+
+echo "Creating registry directory '$REGISTRY_DIR'..."
+mkdir -p "$REGISTRY_DIR"
+
+WASM_FILE=$(find "$PLUGIN_DIR" -name "*.wasm" -type f | head -n 1)
+if [ -z "$WASM_FILE" ]; then
+    echo "Error: No WASM file found after build in '$PLUGIN_DIR'"
+    exit 1
+fi
+
+echo "Moving plugin from '$WASM_FILE' to '$REGISTRY_DIR/'"
+mv "$WASM_FILE" "$REGISTRY_DIR/"
+
+echo "Successfully tagged and registered plugin '$PLUGIN_NAME' version '$VERSION'"
+echo "Git tag: $TAG_NAME"
+echo "Registry location: $REGISTRY_DIR"
