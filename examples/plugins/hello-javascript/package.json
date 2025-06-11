@@ -1,0 +1,26 @@
+{
+  "name": "hello-javascript",
+  "version": "1.0.0",
+  "description": "A simple hello world plugin written in JavaScript for Sup WhatsApp bot",
+  "main": "index.js",
+  "scripts": {
+    "build": "extism-js index.js -i plugin.d.ts -o dist/plugin.wasm",
+    "test": "extism call dist/plugin.wasm handle_message --input '{\"message\":\"test\",\"sender\":\"test@example.com\",\"info\":{\"id\":\"1\",\"timestamp\":1234567890,\"push_name\":\"Test User\",\"is_group\":false}}' --wasi"
+  },
+  "keywords": [
+    "sup",
+    "whatsapp",
+    "bot",
+    "plugin",
+    "wasm",
+    "extism"
+  ],
+  "author": "Sup Community",
+  "license": "MIT",
+  "devDependencies": {
+    "@extism/js-pdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

@@ -1,0 +1,21 @@
+# Sup
+
+## Overview
+
+sup is a WhatsApp CLI and bot framework.
+It's extensible via plugins in /plugins and handlers in internal/bot/handlers/.
+
+## Rules
+
+When writing code:
+
+* Don't add new examples unless I explicitly tell you so
+* Don't add documentation unless I explicity tell you so
+* Don't add new test unless I explicitly tell you so
+* The whatapp library to communicate with WhatApp services is https://github.com/tulir/whatsmeow
+* Plugins are built and installed using script/install-plugins
+* Important documenation lives in README.md and docs/
+* Handlers are written in Go and live in internal/bot/Handlers
+* Plugins are essentially Handlers loaded externally, not built-in. Their interface lives in pkg/plugin
+* Plugins are WASM modules
+* Plugins can be written in any language supported by Extistm (https://extism.org/docs/quickstart/plugin-quickstart) and live in /plugins

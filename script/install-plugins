@@ -1,0 +1,152 @@
+#!/bin/bash
+
+# Build All Plugins Script
+# This script builds all WASM plugins in the plugins directory
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PLUGINS_DIR="$PROJECT_ROOT/plugins"
+
+echo "🔧 Building all plugins in $PLUGINS_DIR"
+echo "==========================================="
+
+# Check if plugins directory exists
+if [ ! -d "$PLUGINS_DIR" ]; then
+    echo "❌ Plugins directory not found: $PLUGINS_DIR"
+    exit 1
+fi
+
+# Check if tinygo is available
+if ! command -v tinygo &> /dev/null; then
+    echo "❌ tinygo is required but not found in PATH"
+    echo "   Please install tinygo: https://tinygo.org/getting-started/install/"
+    exit 1
+fi
+
+# Track build results using temporary files for parallel execution
+TEMP_DIR=$(mktemp -d)
+BUILT_PLUGINS_FILE="$TEMP_DIR/built_plugins"
+FAILED_PLUGINS_FILE="$TEMP_DIR/failed_plugins"
+TOTAL_PLUGINS=0
+BUILD_PIDS=()
+
+# Function to build a single plugin
+build_plugin() {
+    local plugin_dir="$1"
+    local plugin_name="$2"
+    local temp_dir="$3"
+
+    echo ""
+    echo "📦 Building plugin: $plugin_name (PID: $$)"
+    echo "   Directory: $plugin_dir"
+
+    # Check if Makefile exists
+    if [ -f "$plugin_dir/Makefile" ]; then
+        echo "   Using Makefile..."
+        if (cd "$plugin_dir" && make clean && make install) &>/dev/null; then
+            echo "   ✅ Successfully built $plugin_name"
+            echo "$plugin_name" >> "$temp_dir/built_plugins"
+        else
+            echo "   ❌ Failed to build $plugin_name"
+            echo "$plugin_name" >> "$temp_dir/failed_plugins"
+        fi
+    else
+        # Try to build directly with tinygo
+        echo "   No Makefile found, trying direct tinygo build..."
+        if [ -f "$plugin_dir/main.go" ]; then
+            if (cd "$plugin_dir" && tinygo build -o "${plugin_name}.wasm" -target wasi main.go) &>/dev/null; then
+                echo "   ✅ Successfully built $plugin_name"
+                echo "$plugin_name" >> "$temp_dir/built_plugins"
+            else
+                echo "   ❌ Failed to build $plugin_name"
+                echo "$plugin_name" >> "$temp_dir/failed_plugins"
+            fi
+        else
+            echo "   ❌ No main.go found in $plugin_name"
+            echo "$plugin_name" >> "$temp_dir/failed_plugins"
+        fi
+    fi
+}
+
+# Start parallel builds
+for plugin_dir in "$PLUGINS_DIR"/*; do
+    if [ -d "$plugin_dir" ]; then
+        plugin_name=$(basename "$plugin_dir")
+        TOTAL_PLUGINS=$((TOTAL_PLUGINS + 1))
+
+        # Start build in background
+        build_plugin "$plugin_dir" "$plugin_name" "$TEMP_DIR" &
+        BUILD_PIDS+=($!)
+    fi
+done
+
+# Wait for all builds to complete
+echo ""
+echo "⏳ Waiting for all builds to complete..."
+for pid in "${BUILD_PIDS[@]}"; do
+    wait "$pid"
+done
+
+# Read results from temporary files
+BUILT_PLUGINS=()
+FAILED_PLUGINS=()
+
+if [ -f "$BUILT_PLUGINS_FILE" ]; then
+    while IFS= read -r plugin; do
+        BUILT_PLUGINS+=("$plugin")
+    done < "$BUILT_PLUGINS_FILE"
+fi
+
+if [ -f "$FAILED_PLUGINS_FILE" ]; then
+    while IFS= read -r plugin; do
+        FAILED_PLUGINS+=("$plugin")
+    done < "$FAILED_PLUGINS_FILE"
+fi
+
+# Cleanup temporary files
+rm -rf "$TEMP_DIR"
+
+echo ""
+echo "🏁 Build Summary"
+echo "================="
+echo "📊 Total plugins: $TOTAL_PLUGINS"
+echo "✅ Successfully built: ${#BUILT_PLUGINS[@]}"
+echo "❌ Failed builds: ${#FAILED_PLUGINS[@]}"
+
+if [ ${#BUILT_PLUGINS[@]} -gt 0 ]; then
+    echo ""
+    echo "✅ Successfully built plugins:"
+    for plugin in "${BUILT_PLUGINS[@]}"; do
+        echo "   • $plugin"
+    done
+fi
+
+if [ ${#FAILED_PLUGINS[@]} -gt 0 ]; then
+    echo ""
+    echo "❌ Failed to build plugins:"
+    for plugin in "${FAILED_PLUGINS[@]}"; do
+        echo "   • $plugin"
+    done
+    echo ""
+    echo "💡 Check the error messages above for details on each failure."
+    exit 1
+fi
+
+echo ""
+echo "🎉 All plugins built successfully!"
+
+# Optional: List built WASM files
+echo ""
+echo "📁 Built WASM files:"
+find "$PLUGINS_DIR" -name "*.wasm" -type f | while read -r wasm_file; do
+    plugin_dir=$(dirname "$wasm_file")
+    plugin_name=$(basename "$plugin_dir")
+    wasm_name=$(basename "$wasm_file")
+    size=$(ls -lh "$wasm_file" | awk '{print $5}')
+    echo "   • $plugin_name/$wasm_name ($size)"
+done
+
+echo ""
+echo "✨ Done! All plugins are ready to use."
