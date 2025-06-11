@@ -61,6 +61,25 @@ sup send-clipboard -t 15551234567
 # Send clipboard content to a group
 sup send-clipboard -t 120363123456789@g.us --group
 
+# Plugin management
+# List available plugins from registry
+sup plugins plugin-list
+
+# Download and install a plugin
+sup plugins plugin-download weather
+
+# Download specific version of a plugin
+sup plugins plugin-download weather 1.0.0
+
+# Remove an installed plugin
+sup plugins plugin-remove weather
+
+# List currently loaded plugins
+sup plugins list
+
+# Reload all plugins after installing/removing
+sup plugins reload
+
 # Getting help
 sup help
 sup help <command>
