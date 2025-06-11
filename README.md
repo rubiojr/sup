@@ -43,14 +43,14 @@ sup list-contacts
 # Send a text message to a contact
 sup send -t 15551234567 -m "Hello! How are you?"
 
-# Send a text message to a group
-sup send -t 120363123456789 -m "Hello everyone!" --group
+# Send a text message to a group (group contacts end with @g.us or similar)
+sup send -t 120363123456789@g.us -m "Hello everyone!" --group
 
-# Send an image to a contact
+# Send an image to a contact (country code without '+' plus the contact number)
 sup send-file -t 15551234567 -f photo.jpg
 
 # Send a PDF to a group
-sup send-file -t 120363123456789 -f document.pdf --group
+sup send-file -t 120363123456789@g.us -f document.pdf --group
 
 # Send any file type
 sup send-file -t 15551234567 -f archive.zip
@@ -59,7 +59,7 @@ sup send-file -t 15551234567 -f archive.zip
 sup send-clipboard -t 15551234567
 
 # Send clipboard content to a group
-sup send-clipboard -t 120363123456789 --group
+sup send-clipboard -t 120363123456789@g.us --group
 ```
 
 ## Notes
