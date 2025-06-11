@@ -197,6 +197,10 @@ func (m *mockWildcardHandler) GetHelp() handlers.HandlerHelp {
 	}
 }
 
+func (m *mockWildcardHandler) Version() string {
+	return "0.1.0"
+}
+
 // Enhanced mock handler to track if it was called
 type mockHandler struct {
 	called bool
@@ -223,6 +227,10 @@ func (m *mockHandler) GetHelp() handlers.HandlerHelp {
 		Examples:    []string{"test example"},
 		Category:    "test",
 	}
+}
+
+func (m *mockHandler) Version() string {
+	return "0.1.0"
 }
 
 // createMockMessage creates a mock WhatsApp message for testing
