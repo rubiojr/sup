@@ -73,12 +73,12 @@ sup send-clipboard -t 120363123456789 --group
 
 ## Troubleshooting
 
-**"No existing session found, please run 'sup register' first"**: Run `./sup register` and scan the QR code with WhatsApp on your phone
+**"No existing session found, please run 'sup register' first"**: Run `sup register` and scan the QR code with WhatsApp on your phone
 
 **"Invalid group JID"**: Make sure to use the full group JID and the `--group` flag
 
 **"File does not exist"**: Check the file path is correct and accessible
 
-**"Already registered, session exists"**: You're already authenticated. Use `./sup status` to verify
+**"Already registered, session exists"**: You're already authenticated. Use `sup status` to verify
 
 **Connection issues**: Check your internet connection and try again
