@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	Version = "0.9.0"
+	Version = "0.1.2"
 )
 
 var versionCmd = &cli.Command{
