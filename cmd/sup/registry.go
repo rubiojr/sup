@@ -239,10 +239,11 @@ func registryDownloadAction(ctx context.Context, c *cli.Command) error {
 
 	targetDir := getDefaultPluginDir()
 
-	fmt.Println("Downloading plugin...")
+	fmt.Printf("Downloading plugin")
 	if version != "" && version != "latest" {
 		fmt.Printf(" version %s", version)
 	}
+	fmt.Println("...")
 	log.Debug("Downloading plugin", "name", pluginName, "version", version)
 	log.Debug("Registry", "registry", registryURL)
 	log.Debug("Target directory", "directory", targetDir)

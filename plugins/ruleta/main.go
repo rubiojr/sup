@@ -139,6 +139,10 @@ func (h *RuletaPlugin) GetRequiredEnvVars() []string {
 	return []string{}
 }
 
+func (h *RuletaPlugin) Version() string {
+	return "0.1.0"
+}
+
 func init() {
 	plugin.RegisterPlugin(&RuletaPlugin{})
 }

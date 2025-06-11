@@ -168,6 +168,18 @@ func get_topics() int32 {
 	return 0
 }
 
+//export get_version
+func get_version() int32 {
+	if pluginInstance == nil {
+		pdk.OutputString(`{"error":"Plugin not registered. Call plugin.RegisterPlugin() in your main function."}`)
+		return 1
+	}
+
+	version := pluginInstance.Version()
+	pdk.OutputString(version)
+	return 0
+}
+
 // outputError is a helper function to output error responses
 func outputError(message string) {
 	output := Output{

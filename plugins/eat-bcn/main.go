@@ -75,7 +75,7 @@ func (r *EatBcn) HandleMessage(input plugin.Input) plugin.Output {
 
 func (r *EatBcn) parseRestaurants() ([]Restaurant, error) {
 	lines := strings.Split(strings.TrimSpace(restaurantData), "\n")
-	
+
 	if len(lines) <= 1 {
 		return nil, fmt.Errorf("no restaurant data found")
 	}
@@ -164,6 +164,10 @@ func (r *EatBcn) GetHelp() plugin.HelpOutput {
 
 func (r *EatBcn) GetRequiredEnvVars() []string {
 	return []string{}
+}
+
+func (r *EatBcn) Version() string {
+	return "0.1.0"
 }
 
 func init() {

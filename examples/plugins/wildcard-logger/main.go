@@ -12,6 +12,16 @@ import (
 // This plugin logs all messages when registered with the "*" name
 type WildcardLoggerPlugin struct{}
 
+// Name returns the name of the plugin
+func (w *WildcardLoggerPlugin) Name() string {
+	return "wildcard-logger"
+}
+
+// Topics returns the topics this plugin should receive messages for
+func (w *WildcardLoggerPlugin) Topics() []string {
+	return []string{"*"}
+}
+
 // HandleMessage processes all incoming messages when registered as wildcard
 func (w *WildcardLoggerPlugin) HandleMessage(input plugin.Input) plugin.Output {
 	// Log the message details
@@ -30,16 +40,16 @@ func (w *WildcardLoggerPlugin) HandleMessage(input plugin.Input) plugin.Output {
 
 	// Check for specific keywords to respond to
 	message := strings.ToLower(strings.TrimSpace(input.Message))
-	
+
 	// Only respond to specific trigger words to avoid spam
 	if strings.Contains(message, "hello bot") {
 		return plugin.Success("👋 Hello there! I'm watching all messages.")
 	}
-	
+
 	if strings.Contains(message, "bot status") {
 		return plugin.Success("🤖 Wildcard logger is active and monitoring all messages.")
 	}
-	
+
 	// For most messages, we just log them without responding
 	// Return success with no reply to indicate we processed it silently
 	return plugin.Success("")
@@ -47,7 +57,7 @@ func (w *WildcardLoggerPlugin) HandleMessage(input plugin.Input) plugin.Output {
 
 // GetHelp returns help information for this plugin
 func (w *WildcardLoggerPlugin) GetHelp() plugin.HelpOutput {
-	return plugin.NewHelpOutputWithSubscribe(
+	return plugin.NewHelpOutput(
 		"wildcard-logger",
 		"Logs all messages and responds to specific triggers",
 		"Automatically receives all messages",
@@ -56,7 +66,6 @@ func (w *WildcardLoggerPlugin) GetHelp() plugin.HelpOutput {
 			"Say 'bot status' - bot will report its status",
 		},
 		"utility",
-		[]string{"*"},
 	)
 }
 
@@ -64,6 +73,11 @@ func (w *WildcardLoggerPlugin) GetHelp() plugin.HelpOutput {
 func (w *WildcardLoggerPlugin) GetRequiredEnvVars() []string {
 	// This plugin doesn't require any environment variables
 	return []string{}
+}
+
+// Version returns the version of this plugin
+func (w *WildcardLoggerPlugin) Version() string {
+	return "0.1.0"
 }
 
 func init() {
