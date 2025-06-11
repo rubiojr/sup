@@ -22,42 +22,44 @@ See [PLUGINS.md](docs/PLUGINS.md) to create your own plugins.
 
 ## Quick Start
 
+See [BUILD.md](/docs/BUILD.md) for the build and install instructions.
+
 ```bash
 # Check version information
-./sup version
+sup version
 
 # Register with WhatsApp (first time only)
-./sup register
+sup register
 
 # Check registration status
-./sup status
+sup status
 
 # List all groups and find the JID you want
-./sup list-groups
+sup list-groups
 
 # List contacts to find phone numbers
-./sup list-contacts
+sup list-contacts
 
 # Send a text message to a contact
-./sup send -t 15551234567 -m "Hello! How are you?"
+sup send -t 15551234567 -m "Hello! How are you?"
 
 # Send a text message to a group
-./sup send -t 120363123456789 -m "Hello everyone!" --group
+sup send -t 120363123456789 -m "Hello everyone!" --group
 
 # Send an image to a contact
-./sup send-file -t 15551234567 -f photo.jpg
+sup send-file -t 15551234567 -f photo.jpg
 
 # Send a PDF to a group
-./sup send-file -t 120363123456789 -f document.pdf --group
+sup send-file -t 120363123456789 -f document.pdf --group
 
 # Send any file type
-./sup send-file -t 15551234567 -f archive.zip
+sup send-file -t 15551234567 -f archive.zip
 
 # Send clipboard content as a file to a contact
-./sup send-clipboard -t 15551234567
+sup send-clipboard -t 15551234567
 
 # Send clipboard content to a group
-./sup send-clipboard -t 120363123456789 --group
+sup send-clipboard -t 120363123456789 --group
 ```
 
 ## Notes

@@ -9,55 +9,68 @@ Wildcard handlers are special handlers that receive ALL messages sent to the bot
 ## How It Works
 
 ### Registration
-Handlers are registered as wildcard handlers by using the special name `*`:
+Handlers are registered as wildcard handlers by returning `["*"]` from their `Topics()` method:
 
 ```go
-bot.RegisterHandler("*", &MyWildcardHandler{})
+func (h *MyWildcardHandler) Topics() []string {
+    return []string{"*"}
+}
 ```
 
 ### Message Flow
 1. **All Messages**: When any message is received by the bot
-2. **Wildcard First**: If a wildcard handler (`*`) is registered, it receives the message
-3. **Command Check**: If the message starts with the trigger prefix, command handlers are also called
-4. **Both Execute**: Both wildcard and command handlers can process the same message
+2. **Topic Check**: The registry checks each handler's topics to determine which should receive the message
+3. **Wildcard First**: Handlers with `"*"` in their topics receive all messages
+4. **Command Check**: If the message starts with the trigger prefix, handlers with matching command topics are also called
+5. **Both Execute**: Both wildcard and command handlers can process the same message
 
 ### Key Features
 - **Receive All Messages**: Gets every message regardless of prefix
-- **Full Message Text**: Receives complete message content, not parsed arguments
+- **Full Message Text**: Receives complete message content from WhatsApp events
 - **Selective Response**: Can choose when to respond to avoid spam
 - **Background Processing**: Perfect for logging and monitoring
 
 ## Implementation Details
 
-### Bot Changes (`internal/bot/bot.go`)
+### Bot Changes (`bot/bot.go`)
 
-Added `handleWildcardMessage()` method that:
-- Checks if a wildcard handler is registered
-- Calls the handler with the full message
-- Handles errors gracefully
-- Logs wildcard processing
+The bot processes messages in two phases:
+1. `handleRegularMessage()` - Sends messages to wildcard handlers
+2. `handleCommand()` - Processes prefixed commands for command handlers
 
-Modified `eventHandler()` to:
-- Call wildcard handlers first for all messages
-- Then process command handlers for prefixed messages
+Key methods:
+- `eventHandler()` - Main event processing that routes messages
+- `handleRegularMessage()` - Handles non-command messages for wildcard handlers  
+- `handleCommand()` - Processes command messages for specific handlers
 
-### WASM Handler Updates (`internal/handlers/wasm_handler.go`)
+### Handler Interface (`bot/handlers/handlers.go`)
 
-Enhanced `WasmHandler` to:
-- Detect wildcard handlers (name == "*")
-- Pass full message text to wildcard plugins
-- Pass parsed arguments to regular command plugins
-
-### Handler Interface
-All handlers use the same interface:
+All handlers must implement:
 ```go
 type Handler interface {
     HandleMessage(msg *events.Message) error
     GetHelp() HandlerHelp
+    Name() string
+    Topics() []string
 }
 ```
 
-Wildcard handlers extract the full message text from `msg.Message`.
+For wildcard handlers, `Topics()` must return `["*"]`.
+
+### Registry System (`bot/handlers/registry.go`)
+
+The registry uses the `Topics()` method to determine message routing:
+- `GetHandlersForMessage()` - Gets all handlers that should receive a message
+- `shouldReceiveMessage()` - Determines if a handler should receive based on topics
+- Wildcard handlers (`"*"` topic) receive all messages
+- Command handlers receive messages matching their specific topics
+
+### WASM Handler Updates (`bot/handlers/wasm_handler.go`)
+
+Enhanced `WasmHandler` to:
+- Call `get_topics` exported function to determine handler subscriptions
+- Support wildcard plugins that return `["*"]` from their topics
+- Pass full message content to plugins for processing
 
 ## Examples
 
@@ -79,28 +92,40 @@ func (h *MyWildcardHandler) HandleMessage(msg *events.Message) error {
     
     // Respond only to specific triggers
     if strings.Contains(strings.ToLower(messageText), "hello bot") {
-        // Send response...
+        c, _ := client.GetClient()
+        c.SendText(msg.Info.Chat, "👋 Hello there!")
     }
     
     return nil
 }
 
+func (h *MyWildcardHandler) Name() string {
+    return "wildcard"
+}
+
+func (h *MyWildcardHandler) Topics() []string {
+    return []string{"*"}
+}
+
 func (h *MyWildcardHandler) GetHelp() handlers.HandlerHelp {
     return handlers.HandlerHelp{
-        Name: "*",
+        Name: "wildcard",
         Description: "Monitors all messages",
-        // ... other fields
+        Usage: "Automatic",
+        Examples: []string{"Any message triggers logging"},
+        Category: "utility",
     }
 }
 ```
 
 ### WASM Plugin Handler
 
+The plugin interface in Go (`pkg/plugin/plugin.go`):
+
 ```go
 type WildcardPlugin struct{}
 
 func (w *WildcardPlugin) HandleMessage(input plugin.Input) plugin.Output {
-    // input.Message contains full text for wildcard handlers
     fmt.Printf("Received: %s\n", input.Message)
     
     if strings.Contains(strings.ToLower(input.Message), "bot status") {
@@ -110,8 +135,26 @@ func (w *WildcardPlugin) HandleMessage(input plugin.Input) plugin.Output {
     return plugin.Success("") // Silent processing
 }
 
+func (w *WildcardPlugin) Name() string {
+    return "wildcard-logger"
+}
+
+func (w *WildcardPlugin) Topics() []string {
+    return []string{"*"}
+}
+
 func (w *WildcardPlugin) GetHelp() plugin.HelpOutput {
-    return plugin.NewHelpOutput("*", "Wildcard logger", "Auto", []string{}, "utility")
+    return plugin.NewHelpOutput(
+        "wildcard-logger", 
+        "Wildcard logger", 
+        "Auto", 
+        []string{}, 
+        "utility"
+    )
+}
+
+func (w *WildcardPlugin) GetRequiredEnvVars() []string {
+    return []string{}
 }
 ```
 
@@ -162,42 +205,45 @@ func (w *WildcardHandler) HandleMessage(msg *events.Message) error {
 
 ## Testing
 
-Added comprehensive tests in `internal/bot/bot_test.go`:
+Tests are available in `bot/bot_test.go`:
 - `TestWildcardHandler`: Verifies wildcard handler receives messages
 - `TestWildcardHandlerWithCommandMessage`: Confirms both wildcard and command handlers execute
 
 ## Files Added/Modified
 
 ### Core Implementation
-- `internal/bot/bot.go` - Added wildcard message handling
-- `internal/handlers/wasm_handler.go` - Enhanced for wildcard support
+- `bot/bot.go` - Main bot with wildcard message handling
+- `bot/handlers/handlers.go` - Handler interface including Topics() method
+- `bot/handlers/registry.go` - Registry with topic-based message routing
+- `bot/handlers/wasm_handler.go` - Enhanced for wildcard support via topics
 
 ### Examples
-- `internal/bot/handlers/wildcard.go` - Example built-in wildcard handler
-- `examples/wildcard-example.go` - Complete usage example
+- `bot/handlers/wildcard.go` - Example built-in wildcard handler
 - `examples/plugins/wildcard-logger/` - WASM plugin example
-- `examples/wildcard-handlers.md` - Detailed documentation
+
+### Plugin Interface  
+- `pkg/plugin/plugin.go` - Plugin interface with Topics() method support
 
 ### Tests
-- `internal/bot/bot_test.go` - Wildcard handler tests
+- `bot/bot_test.go` - Wildcard handler tests
 
 ## Usage Examples
 
 ### Register Built-in Handler
 ```go
 bot := New()
-bot.RegisterHandler("*", &MyWildcardHandler{})
+bot.RegisterHandler(&MyWildcardHandler{})
 ```
 
 ### WASM Plugin
-1. Create plugin with name "*" in GetHelp()
+1. Create plugin that returns `["*"]` from `Topics()` method
 2. Build with `tinygo build -o plugin.wasm -target wasi main.go`
 3. Place in `~/.local/share/sup/plugins/`
 
-### Full Example
-See `examples/wildcard-example.go` for a complete working example that demonstrates:
+### Complete Example
+See `examples/plugins/wildcard-logger/main.go` for a complete working example that demonstrates:
 - Message logging and counting
-- Natural language responses
+- Natural language responses  
 - Coexistence with command handlers
 
 ## Compatibility
@@ -208,4 +254,4 @@ See `examples/wildcard-example.go` for a complete working example that demonstra
 - ✅ Backward compatible with current bots
 - ✅ All tests pass
 
-The wildcard handler implementation provides a powerful foundation for building more intelligent and responsive WhatsApp bots.
+The wildcard handler implementation provides a powerful foundation for building more intelligent and responsive WhatsApp bots through the flexible topic subscription system.
