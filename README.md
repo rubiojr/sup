@@ -22,7 +22,7 @@ See [PLUGINS.md](docs/PLUGINS.md) to create your own plugins, and [HANDLERS.md](
 
 ## Quick Start
 
-See [BUILD.md](/docs/BUILD.md) for the build and install instructions.
+See [INSTALL.md](/docs/INSTALL.md) for the build and install instructions.
 
 ```bash
 # Check version information
