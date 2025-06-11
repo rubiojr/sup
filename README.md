@@ -80,6 +80,9 @@ sup plugins list
 # Reload all plugins after installing/removing
 sup plugins reload
 
+# Build a plugin registry index from a directory structure
+sup index-registry /path/to/plugins https://registry-url.com
+
 # Getting help
 sup help
 sup help <command>

@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -136,6 +137,21 @@ func (c *Client) DownloadPlugin(pluginName, version string, targetDir string) er
 
 	log.Debug("Successfully downloaded plugin", "name", pluginName, "version", version, "path", pluginPath)
 	return nil
+}
+
+func compressData(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gzipWriter := gzip.NewWriter(&buf)
+	
+	if _, err := gzipWriter.Write(data); err != nil {
+		return nil, fmt.Errorf("failed to write to gzip writer: %w", err)
+	}
+	
+	if err := gzipWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
+	}
+	
+	return buf.Bytes(), nil
 }
 
 func (c *Client) ListPlugins() ([]PluginInfo, error) {

@@ -158,6 +158,76 @@ sup plugins plugin-download jokes --registry https://custom-registry.example.com
 sup plugins plugin-remove weather
 ```
 
+## Building a Registry Index
+
+The `sup index-registry` command can be used to build registry index files from a directory structure containing plugins.
+
+### Directory Structure
+
+The command expects plugins to be organized as follows:
+
+```
+plugins/
+├── plugin-name/
+│   ├── version/
+│   │   ├── plugin-name.wasm
+│   │   └── metadata.json (optional)
+│   └── another-version/
+│       ├── plugin-name.wasm
+│       └── metadata.json (optional)
+└── another-plugin/
+    └── version/
+        ├── another-plugin.wasm
+        └── metadata.json (optional)
+```
+
+### Metadata Files
+
+Each plugin version can include an optional `metadata.json` file with plugin information:
+
+```json
+{
+  "name": "plugin-name",
+  "description": "Plugin description",
+  "author": "Author Name",
+  "home_url": "https://github.com/author/plugin",
+  "category": "utility",
+  "tags": ["tag1", "tag2"]
+}
+```
+
+If no metadata file is provided, default values will be used.
+
+### Usage
+
+```bash
+# Build index from plugins directory
+sup index-registry /path/to/plugins https://sup-registry.rbel.co
+
+# Specify output directory
+sup index-registry /path/to/plugins https://sup-registry.rbel.co --output /path/to/output
+
+# Enable verbose output
+sup index-registry /path/to/plugins https://sup-registry.rbel.co --verbose
+```
+
+This generates:
+- `index.json` - Uncompressed JSON for debugging
+- `index.json.gz` - Compressed registry index
+- `index.json.gz.sha256` - Checksum file
+
+### Example
+
+```bash
+# Create a test registry structure
+mkdir -p registry/plugins/weather/1.0.0
+echo "fake weather plugin data" > registry/plugins/weather/1.0.0/weather.wasm
+echo '{"name":"weather","description":"Weather forecasts","author":"WeatherBot"}' > registry/plugins/weather/1.0.0/metadata.json
+
+# Build the index
+sup index-registry registry https://sup-registry.rbel.co --output dist --verbose
+```
+
 ## Security Considerations
 
 1. **Checksum Verification**: All downloads are verified using SHA256 checksums
