@@ -11,16 +11,11 @@ import (
 
 func TestNewBuilder(t *testing.T) {
 	baseDir := "/tmp/test"
-	baseURL := "https://example.com"
 
-	builder := NewBuilder(baseDir, baseURL)
+	builder := NewBuilder(baseDir)
 
 	if builder.baseDir != baseDir {
 		t.Errorf("Expected baseDir %s, got %s", baseDir, builder.baseDir)
-	}
-
-	if builder.baseURL != baseURL {
-		t.Errorf("Expected baseURL %s, got %s", baseURL, builder.baseURL)
 	}
 
 	expectedPluginsDir := filepath.Join(baseDir, "plugins")
@@ -36,7 +31,7 @@ func TestBuildIndexNoPluginsDir(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	builder := NewBuilder(tempDir, "https://example.com")
+	builder := NewBuilder(tempDir)
 
 	_, err = builder.BuildIndex()
 	if err == nil {
@@ -56,7 +51,7 @@ func TestBuildIndexEmptyDir(t *testing.T) {
 		t.Fatalf("Failed to create plugins dir: %v", err)
 	}
 
-	builder := NewBuilder(tempDir, "https://example.com")
+	builder := NewBuilder(tempDir)
 
 	index, err := builder.BuildIndex()
 	if err != nil {
@@ -108,7 +103,7 @@ func TestBuildIndexWithPlugins(t *testing.T) {
 		t.Fatalf("Failed to write metadata file: %v", err)
 	}
 
-	builder := NewBuilder(tempDir, "https://example.com")
+	builder := NewBuilder(tempDir)
 
 	index, err := builder.BuildIndex()
 	if err != nil {
@@ -183,7 +178,7 @@ func TestBuildIndexMultipleVersions(t *testing.T) {
 		}
 	}
 
-	builder := NewBuilder(tempDir, "https://example.com")
+	builder := NewBuilder(tempDir)
 
 	index, err := builder.BuildIndex()
 	if err != nil {
@@ -212,7 +207,7 @@ func TestBuildIndexMultipleVersions(t *testing.T) {
 }
 
 func TestLoadMetadataNoFile(t *testing.T) {
-	builder := NewBuilder("/tmp", "https://example.com")
+	builder := NewBuilder("/tmp")
 
 	metadata, err := builder.loadMetadata("/nonexistent/path", "test-plugin")
 	if err != nil {
@@ -263,7 +258,7 @@ func TestLoadMetadataWithFile(t *testing.T) {
 		t.Fatalf("Failed to write metadata file: %v", err)
 	}
 
-	builder := NewBuilder(tempDir, "https://example.com")
+	builder := NewBuilder(tempDir)
 
 	loadedMetadata, err := builder.loadMetadata(metadataPath, "fallback-name")
 	if err != nil {
@@ -294,7 +289,7 @@ func TestWriteIndex(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	builder := NewBuilder("/tmp", "https://example.com")
+	builder := NewBuilder("/tmp")
 
 	index := &Index{
 		Version:   "1.0.0",
