@@ -69,7 +69,7 @@ sup registry install echo
 sup registry install echo 0.1.0
 
 # Remove an installed plugin
-sup plugins remove weather
+sup plugins remove echo
 
 # List currently loaded plugins
 sup plugins list
