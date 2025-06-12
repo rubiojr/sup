@@ -8,12 +8,15 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"github.com/rubiojr/aemet-go"
+	"github.com/rubiojr/sup/bot"
 	"github.com/rubiojr/sup/bot/handlers"
 	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/rubiojr/sup/internal/client"
 )
 
-type MeteoHandler struct{}
+type MeteoHandler struct {
+	bot *bot.Bot
+}
 
 func (h *MeteoHandler) Name() string {
 	return "meteo"
@@ -21,6 +24,12 @@ func (h *MeteoHandler) Name() string {
 
 func (h *MeteoHandler) Topics() []string {
 	return []string{"meteo"}
+}
+
+func NewMeteoHandler(bot *bot.Bot) *MeteoHandler {
+	return &MeteoHandler{
+		bot: bot,
+	}
 }
 
 func (h *MeteoHandler) HandleMessage(msg *events.Message) error {

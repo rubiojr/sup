@@ -56,7 +56,7 @@ func botCommand(ctx context.Context, cmd *cli.Command) error {
 }
 
 func registerHandlers(b *bot.Bot) error {
-	if err := b.RegisterHandler(&handlers.MeteoHandler{}); err != nil {
+	if err := b.RegisterHandler(handlers.NewMeteoHandler(b)); err != nil {
 		return err
 	}
 
