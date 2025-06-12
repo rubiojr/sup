@@ -8,7 +8,7 @@ require (
 	github.com/ncruces/go-sqlite3 v0.26.0
 	github.com/rubiojr/aemet-go v0.3.0
 	github.com/tetratelabs/wazero v1.9.0
-	go.mau.fi/whatsmeow v0.0.0-20250530091404-0da7ff77db31
+	go.mau.fi/whatsmeow v0.0.0-20250611144432-af1a723d11ee
 	google.golang.org/protobuf v1.36.6
 )
 
