@@ -99,3 +99,15 @@ sup help <command>
 **"Already registered, session exists"**: You're already authenticated. Use `sup status` to verify
 
 **Connection issues**: Check your internet connection and try again
+
+## Credits
+
+Sup is made possible thanks to the following libraries:
+
+- [whatsmeow](https://github.com/tulir/whatsmeow) - Go library for the WhatsApp Web API
+- [Extism](https://extism.org) - WebAssembly plugin system for the bot framework
+- [urfave/cli](https://github.com/urfave/cli) - Command line interface framework
+- [mdp/qrterminal](https://github.com/mdp/qrterminal) - QR code generator for terminal output
+- [ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3) - SQLite driver for database storage
+- [gabriel-vasile/mimetype](https://github.com/gabriel-vasile/mimetype) - MIME type detection for files
+- [tetratelabs/wazero](https://github.com/tetratelabs/wazero) - WebAssembly runtime for Go
