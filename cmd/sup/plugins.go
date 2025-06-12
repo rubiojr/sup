@@ -52,7 +52,11 @@ var pluginsCmd = &cli.Command{
 }
 
 func listPluginsAction(ctx context.Context, c *cli.Command) error {
-	botInstance := bot.New()
+	botInstance, err := bot.New()
+	if err != nil {
+		return err
+	}
+
 	if err := botInstance.RegisterDefaultHandlers(); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}
@@ -122,7 +126,10 @@ func loadPluginsAction(ctx context.Context, c *cli.Command) error {
 }
 
 func reloadPluginsAction(ctx context.Context, c *cli.Command) error {
-	botInstance := bot.New()
+	botInstance, err := bot.New()
+	if err != nil {
+		return fmt.Errorf("failed to create bot instance: %w", err)
+	}
 
 	fmt.Println("Reloading WASM plugins...")
 
@@ -150,7 +157,10 @@ func pluginInfoAction(ctx context.Context, c *cli.Command) error {
 
 	pluginName := c.Args().First()
 
-	botInstance := bot.New()
+	botInstance, err := bot.New()
+	if err != nil {
+		return fmt.Errorf("failed to create bot instance: %w", err)
+	}
 	if err := botInstance.RegisterDefaultHandlers(); err != nil {
 		return fmt.Errorf("failed to register handlers: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -13,6 +14,7 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/internal/botfs"
 	"github.com/rubiojr/sup/internal/client"
 )
 
@@ -24,6 +26,7 @@ type Bot struct {
 	pluginManager handlers.PluginManager
 	logger        *slog.Logger
 	trigger       string
+	cache         Cache
 }
 
 // Option is a function that configures the Bot
@@ -69,6 +72,14 @@ func WithPluginManager(pm handlers.PluginManager) Option {
 	}
 }
 
+// WithCache sets a custom cache for the bot.
+// If not provided, the bot will create a default cache.
+func WithCache(cache Cache) Option {
+	return func(b *Bot) {
+		b.cache = cache
+	}
+}
+
 // New creates a new Bot instance with the given options.
 // The bot is initialized with a default logger (slog.Default()) and
 // all handlers are automatically registered.
@@ -92,7 +103,7 @@ func WithPluginManager(pm handlers.PluginManager) Option {
 //	// Create a bot with custom registry
 //	registry := handlers.NewRegistry()
 //	bot := New(WithRegistry(registry))
-func New(opts ...Option) *Bot {
+func New(opts ...Option) (*Bot, error) {
 	b := &Bot{
 		registry:      handlers.NewRegistry(),
 		logger:        slog.Default(),
@@ -104,6 +115,24 @@ func New(opts ...Option) *Bot {
 		opt(b)
 	}
 
+	// Initialize default cache if none provided
+	cacheDir := filepath.Join(botfs.DataDir(), "cache")
+	cachePath := filepath.Join(cacheDir, "cache.db")
+	if b.cache == nil {
+		err := os.MkdirAll(cacheDir, os.ModeDir|0755)
+		if err != nil {
+			return nil, err
+		}
+		cache, err := NewCache(cachePath)
+		if err != nil {
+			b.logger.Warn("Failed to initialize default cache", "error", err)
+			return nil, err
+		} else {
+			b.logger.Debug("Cache initialized")
+			b.cache = cache
+		}
+	}
+
 	if b.pluginManager != nil {
 		// Load WASM plugins
 		if err := b.pluginManager.LoadPlugins(); err != nil {
@@ -112,7 +141,7 @@ func New(opts ...Option) *Bot {
 		b.registry.SetPluginManager(b.pluginManager)
 	}
 
-	return b
+	return b, nil
 }
 
 // RegisterHandler registers a new handler with the bot
@@ -248,11 +277,14 @@ func (b *Bot) handleCommand(msg *events.Message, handlerPrefix string) {
 			b.logger.Error("Error handling command",
 				"command", commandName,
 				"sender", msg.Info.Chat.String(),
+				"handler", handler.Name(),
 				"error", err)
 		} else {
 			b.logger.Debug("Command handled successfully",
 				"command", commandName,
-				"sender", msg.Info.Chat.String())
+				"sender", msg.Info.Chat.String(),
+				"handler", handler.Name(),
+			)
 		}
 	}
 }
@@ -283,6 +315,22 @@ func (b *Bot) handleRegularMessage(msg *events.Message) {
 
 func (b *Bot) PluginManager() handlers.PluginManager {
 	return b.pluginManager
+}
+
+// SetCache stores a value in the bot's cache
+func (b *Bot) Cache(key string, value []byte) error {
+	if b.cache == nil {
+		return fmt.Errorf("cache not initialized")
+	}
+	return b.cache.Put([]byte(key), value)
+}
+
+// GetCache retrieves a value from the bot's cache
+func (b *Bot) GetCached(key string) ([]byte, error) {
+	if b.cache == nil {
+		return nil, fmt.Errorf("cache not initialized")
+	}
+	return b.cache.Get([]byte(key))
 }
 
 // RegisterDefaultHandlers registers all available bot handlers with the given bot

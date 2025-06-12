@@ -36,7 +36,7 @@ func NewCache(path string, opts ...CacheOption) (*kvCache, error) {
 	}
 
 	if cache.expiry == nil {
-		defaultExpiry := 12 * time.Hour
+		defaultExpiry := 1 * time.Hour
 		cache.expiry = &defaultExpiry
 	}
 

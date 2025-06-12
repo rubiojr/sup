@@ -5,15 +5,24 @@ import (
 	"path/filepath"
 )
 
-func HandlersDataDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".local/share/sup/handlers"), nil
+func HandlersDataDir() string {
+	return filepath.Join(DataDir(), "handlers")
 }
 
-func HandlerDataDir(handler string) (string, error) {
-	d, err := HandlersDataDir()
-	return filepath.Join(d, handler), err
+func DataDir() string {
+	return filepath.Join(UserHome(), ".local/share/sup")
+}
+
+func HandlerDataDir(handler string) string {
+	return filepath.Join(DataDir(), handler)
+}
+
+func UserHome() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// We need a home dir, this should only panic in rare circumstances
+		// where we actually want to panic.
+		panic(err)
+	}
+	return home
 }
