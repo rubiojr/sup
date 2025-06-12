@@ -1,3 +1,5 @@
+![](/images/banner.png)
+
 # Sup
 
 WhatsApp CLI and Bot framework.
