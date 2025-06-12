@@ -17,7 +17,6 @@ type PluginManager interface {
 	GetPlugin(name string) (*WasmHandler, bool)
 	UnloadAll() error
 	UnloadPlugin(name string) error
-	SetCache(cache cache.Cache)
 }
 
 type pluginManager struct {
@@ -26,25 +25,22 @@ type pluginManager struct {
 	cache     cache.Cache
 }
 
-func NewPluginManager(pluginDir string) PluginManager {
+func NewPluginManager(pluginDir string, c cache.Cache) PluginManager {
 	return &pluginManager{
 		pluginDir: pluginDir,
 		plugins:   make(map[string]*WasmHandler),
+		cache:     c,
 	}
 }
 
-func (pm *pluginManager) SetCache(cache cache.Cache) {
-	pm.cache = cache
-}
-
-func DefaultPluginManager() PluginManager {
+func DefaultPluginManager(cache cache.Cache) PluginManager {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		panic("could not get default user home")
 	}
 
 	pluginDir := filepath.Join(homeDir, ".local", "share", "sup", "plugins")
-	return NewPluginManager(pluginDir)
+	return NewPluginManager(pluginDir, cache)
 }
 
 func (pm *pluginManager) LoadPlugins() error {

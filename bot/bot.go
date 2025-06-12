@@ -79,7 +79,6 @@ func WithPluginManager(pm handlers.PluginManager) Option {
 func WithCache(cache cache.Cache) Option {
 	return func(b *Bot) {
 		b.cache = cache
-		b.pluginManager.SetCache(cache)
 	}
 }
 
@@ -108,10 +107,9 @@ func WithCache(cache cache.Cache) Option {
 //	bot := New(WithRegistry(registry))
 func New(opts ...Option) (*Bot, error) {
 	b := &Bot{
-		registry:      handlers.NewRegistry(),
-		logger:        slog.Default(),
-		trigger:       DefaultTrigger,
-		pluginManager: handlers.DefaultPluginManager(),
+		registry: handlers.NewRegistry(),
+		logger:   slog.Default(),
+		trigger:  DefaultTrigger,
 	}
 
 	for _, opt := range opts {
@@ -135,11 +133,9 @@ func New(opts ...Option) (*Bot, error) {
 			b.cache = cache
 		}
 	}
+	b.pluginManager = handlers.DefaultPluginManager(b.cache)
 
 	if b.pluginManager != nil {
-		// Set cache on plugin manager
-		b.pluginManager.SetCache(b.cache)
-
 		// Load WASM plugins
 		if err := b.pluginManager.LoadPlugins(); err != nil {
 			b.logger.Warn("Failed to load WASM plugins", "error", err)

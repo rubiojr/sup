@@ -21,23 +21,6 @@ var pluginsCmd = &cli.Command{
 			Action: listPluginsAction,
 		},
 		{
-			Name:   "load",
-			Usage:  "Load plugins from directory",
-			Action: loadPluginsAction,
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  "dir",
-					Usage: "Plugin directory path",
-					Value: getDefaultPluginDir(),
-				},
-			},
-		},
-		{
-			Name:   "reload",
-			Usage:  "Reload all plugins",
-			Action: reloadPluginsAction,
-		},
-		{
 			Name:   "info",
 			Usage:  "Show plugin information",
 			Action: pluginInfoAction,
@@ -93,58 +76,6 @@ func listPluginsAction(ctx context.Context, c *cli.Command) error {
 			version := handler.Version()
 			fmt.Printf("  %-15s %-10s\n", name, version)
 		}
-	}
-
-	return nil
-}
-
-func loadPluginsAction(ctx context.Context, c *cli.Command) error {
-	pluginDir := c.String("dir")
-
-	pluginManager := handlers.NewPluginManager(pluginDir)
-
-	fmt.Printf("Loading plugins from: %s\n", pluginDir)
-
-	if err := pluginManager.LoadPlugins(); err != nil {
-		return fmt.Errorf("failed to load plugins: %w", err)
-	}
-
-	plugins := pluginManager.GetAllPlugins()
-	if len(plugins) == 0 {
-		fmt.Println("No WASM plugins found in directory")
-		return nil
-	}
-
-	fmt.Printf("Successfully loaded %d plugin(s):\n", len(plugins))
-	for name, plugin := range plugins {
-		help := plugin.GetHelp()
-		version := plugin.Version()
-		fmt.Printf("  %-15s %-10s - %s\n", name, version, help.Description)
-	}
-
-	return nil
-}
-
-func reloadPluginsAction(ctx context.Context, c *cli.Command) error {
-	botInstance, err := bot.New()
-	if err != nil {
-		return fmt.Errorf("failed to create bot instance: %w", err)
-	}
-
-	fmt.Println("Reloading WASM plugins...")
-
-	if err := botInstance.ReloadPlugins(); err != nil {
-		return fmt.Errorf("failed to reload plugins: %w", err)
-	}
-
-	pluginManager := botInstance.PluginManager()
-	plugins := pluginManager.GetAllPlugins()
-
-	fmt.Printf("Successfully reloaded %d plugin(s)\n", len(plugins))
-	for name, plugin := range plugins {
-		help := plugin.GetHelp()
-		version := plugin.Version()
-		fmt.Printf("  %-15s %-10s - %s\n", name, version, help.Description)
 	}
 
 	return nil
