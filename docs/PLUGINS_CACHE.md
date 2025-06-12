@@ -6,6 +6,7 @@ Sup provides a key-value caching system for plugins, allowing them to persistent
 
 - **Purpose**: Store persistent data between plugin invocations
 - **Implementation**: SQLite-backed key-value store
+- **Isolation**: Each plugin has its own isolated storage space
 - **Default Expiry**: 1 hour (configurable)
 - **Usage**: Simple Get/Set operations with string keys
 - **Serialization**: Values are stored as byte arrays (can store any serializable data)

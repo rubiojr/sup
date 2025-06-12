@@ -73,18 +73,17 @@ func (pm *pluginManager) LoadPlugins() error {
 }
 
 func (pm *pluginManager) loadPlugin(pluginPath string) error {
-	handler, err := NewWasmHandler(pluginPath, pm.cache)
+	pluginName := filepath.Base(pluginPath)
+	if ext := filepath.Ext(pluginName); ext != "" {
+		pluginName = pluginName[:len(pluginName)-len(ext)]
+	}
+	handler, err := NewWasmHandler(pluginPath, pm.cache.Namespace(pluginName))
 	if err != nil {
 		return fmt.Errorf("failed to create WASM handler: %w", err)
 	}
 
-	pluginName := handler.GetHelp().Name
-	if pluginName == "" {
-		name := filepath.Base(pluginPath)
-		if ext := filepath.Ext(name); ext != "" {
-			name = name[:len(name)-len(ext)]
-		}
-		pluginName = name
+	if n := handler.GetHelp().Name; n != "" {
+		pluginName = n
 	}
 
 	if existing, exists := pm.plugins[pluginName]; exists {

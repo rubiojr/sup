@@ -26,7 +26,7 @@ func (p *CounterPlugin) HandleMessage(input plugin.Input) plugin.Output {
 		action = args[0]
 	}
 
-	cacheKey := fmt.Sprintf("counter:%s", input.Sender)
+	cacheKey := fmt.Sprintf("%s", input.Sender)
 	switch action {
 	case "increment", "inc", "+":
 		return p.incrementCounter(cacheKey)

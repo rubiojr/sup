@@ -9,15 +9,15 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"github.com/rubiojr/aemet-go"
-	"github.com/rubiojr/sup/bot"
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/rubiojr/sup/internal/client"
 	"github.com/rubiojr/sup/internal/log"
 )
 
 type MeteoHandler struct {
-	bot *bot.Bot
+	cache cache.Cache
 }
 
 func (h *MeteoHandler) Name() string {
@@ -28,9 +28,9 @@ func (h *MeteoHandler) Topics() []string {
 	return []string{"meteo"}
 }
 
-func NewMeteoHandler(bot *bot.Bot) *MeteoHandler {
+func NewMeteoHandler(cache cache.Cache) *MeteoHandler {
 	return &MeteoHandler{
-		bot: bot,
+		cache: cache,
 	}
 }
 
@@ -86,14 +86,9 @@ func (h *MeteoHandler) HandleMessage(msg *events.Message) error {
 }
 
 func (h *MeteoHandler) forecastFromCache(cityName string) *aemet.Municipality {
-	cacheKey := fmt.Sprintf("meteo:%s", strings.ToLower(cityName))
+	cacheKey := fmt.Sprintf("%s", strings.ToLower(cityName))
 
-	cache, err := h.bot.Cache()
-	if err != nil {
-		return nil
-	}
-
-	data, err := cache.Get([]byte(cacheKey))
+	data, err := h.cache.Get([]byte(cacheKey))
 	if err != nil {
 		return nil
 	}
@@ -108,20 +103,14 @@ func (h *MeteoHandler) forecastFromCache(cityName string) *aemet.Municipality {
 }
 
 func (h *MeteoHandler) cacheForecast(cityName string, f *aemet.Municipality) {
-	cacheKey := fmt.Sprintf("meteo:%s", strings.ToLower(cityName))
+	cacheKey := fmt.Sprintf("%s", strings.ToLower(cityName))
 
 	data, err := json.Marshal(f)
 	if err != nil {
 		return
 	}
 
-	cache, err := h.bot.Cache()
-	if err != nil {
-		log.Debug("Failed to get cache", "error", err)
-		return
-	}
-
-	err = cache.Put([]byte(cacheKey), data)
+	err = h.cache.Put([]byte(cacheKey), data)
 	if err != nil {
 		log.Debug("Failed to cache forecast", "city", cityName, "error", err)
 		return

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/rubiojr/kv"
@@ -9,6 +10,7 @@ import (
 type Cache interface {
 	Get(key []byte) ([]byte, error)
 	Put(key []byte, value []byte) error
+	Namespace(name string) Cache
 }
 
 type CacheOption func(*kvCache)
@@ -20,8 +22,9 @@ func WithExpiry(expiry time.Duration) CacheOption {
 }
 
 type kvCache struct {
-	db     kv.Database
-	expiry *time.Duration
+	db        kv.Database
+	expiry    *time.Duration
+	namespace string
 }
 
 func NewCache(path string, opts ...CacheOption) (*kvCache, error) {
@@ -44,7 +47,7 @@ func NewCache(path string, opts ...CacheOption) (*kvCache, error) {
 }
 
 func (c *kvCache) Get(key []byte) ([]byte, error) {
-	return c.db.Get(string(key))
+	return c.db.Get(c.namespace + string(key))
 }
 
 func (c *kvCache) Put(key []byte, value []byte) error {
@@ -53,5 +56,13 @@ func (c *kvCache) Put(key []byte, value []byte) error {
 		expiry := time.Now().Add(*c.expiry)
 		expireAt = &expiry
 	}
-	return c.db.Set(string(key), value, expireAt)
+	return c.db.Set(c.namespace+string(key), value, expireAt)
+}
+
+func (c *kvCache) Namespace(name string) Cache {
+	return &kvCache{
+		db:        c.db,
+		expiry:    c.expiry,
+		namespace: fmt.Sprintf("%s:", name),
+	}
 }
