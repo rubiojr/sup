@@ -4,17 +4,22 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cache"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
 func TestNew(t *testing.T) {
-	bot := New()
+	bot, err := New()
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
 	if bot == nil {
 		t.Fatal("New() returned nil")
 	}
@@ -35,7 +40,10 @@ func TestNewWithCustomLogger(t *testing.T) {
 		Level: slog.LevelDebug,
 	}))
 
-	bot := New(WithLogger(logger))
+	bot, err := New(WithLogger(logger))
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
 	if bot == nil {
 		t.Fatal("New() returned nil")
 	}
@@ -57,12 +65,15 @@ func TestNewWithCustomLogger(t *testing.T) {
 }
 
 func TestRegisterHandler(t *testing.T) {
-	bot := New()
+	bot, err := New()
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
 
 	// Create a mock handler
 	mockHandler := &mockHandler{}
 
-	err := bot.RegisterHandler(mockHandler)
+	err = bot.RegisterHandler(mockHandler)
 	if err != nil {
 		t.Fatalf("Failed to register handler: %v", err)
 	}
@@ -80,14 +91,17 @@ func TestStartWithCancellation(t *testing.T) {
 		Level: slog.LevelDebug,
 	}))
 
-	bot := New(WithLogger(logger))
+	bot, err := New(WithLogger(logger))
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	// This should return quickly due to context cancellation
 	// Note: This will fail to connect to WhatsApp, but that's expected in tests
-	err := bot.Start(ctx)
+	err = bot.Start(ctx)
 
 	// We expect an error because WhatsApp client won't be available in tests
 	if err == nil {
@@ -102,11 +116,14 @@ func TestStartWithCancellation(t *testing.T) {
 }
 
 func TestWildcardHandler(t *testing.T) {
-	bot := New()
+	bot, err := New()
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
 
 	// Create a mock wildcard handler
 	mockWildcard := &mockWildcardHandler{}
-	err := bot.RegisterHandler(mockWildcard)
+	err = bot.RegisterHandler(mockWildcard)
 	if err != nil {
 		t.Fatalf("Failed to register wildcard handler: %v", err)
 	}
@@ -130,13 +147,16 @@ func TestWildcardHandler(t *testing.T) {
 }
 
 func TestWildcardHandlerWithCommandMessage(t *testing.T) {
-	bot := New()
+	bot, err := New()
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
 
 	// Create mock handlers
 	mockWildcard := &mockWildcardHandler{}
 	mockCommand := &mockHandler{}
 
-	err := bot.RegisterHandler(mockWildcard)
+	err = bot.RegisterHandler(mockWildcard)
 	if err != nil {
 		t.Fatalf("Failed to register wildcard handler: %v", err)
 	}
@@ -164,6 +184,63 @@ func TestWildcardHandlerWithCommandMessage(t *testing.T) {
 	// Verify wildcard handler was called for regular message
 	if !mockWildcard.called {
 		t.Fatal("Wildcard handler was not called for regular message")
+	}
+}
+
+func TestBotCache(t *testing.T) {
+	// Create temporary directory for cache
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "bot_cache.db")
+
+	// Create cache for bot
+	cache, err := cache.NewCache(cachePath)
+	if err != nil {
+		t.Fatalf("NewCache() returned error: %v", err)
+	}
+
+	// Create bot with cache
+	bot, err := New(WithCache(cache))
+	if err != nil {
+		t.Fatalf("New() with cache returned error: %v", err)
+	}
+
+	key := "test_bot_key"
+	value := []byte("test_bot_value")
+
+	// Test Cache
+	botCache, err := bot.Cache()
+	if err != nil {
+		t.Fatalf("Cache() returned error: %v", err)
+	}
+
+	err = botCache.Put([]byte(key), value)
+	if err != nil {
+		t.Fatalf("Cache.Put() returned error: %v", err)
+	}
+
+	// Test GetCached
+	retrievedValue, err := botCache.Get([]byte(key))
+	if err != nil {
+		t.Fatalf("Cache.Get() returned error: %v", err)
+	}
+
+	if string(retrievedValue) != string(value) {
+		t.Errorf("Expected value %s, got %s", string(value), string(retrievedValue))
+	}
+}
+
+func TestBotCacheNotInitialized(t *testing.T) {
+	// Create bot without cache (should fail with cache disabled)
+	// This test is tricky because New() always initializes a cache now
+	// We need to create a bot with a nil cache directly
+	bot := &Bot{
+		cache: nil,
+	}
+
+	// Test Cache with nil cache
+	_, err := bot.Cache()
+	if err == nil {
+		t.Fatal("Expected error for Cache() with nil cache, got nil")
 	}
 }
 

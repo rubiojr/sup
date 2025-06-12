@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -9,11 +10,15 @@ import (
 
 	"github.com/rubiojr/aemet-go"
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/cmd/sup/version"
 	"github.com/rubiojr/sup/internal/client"
+	"github.com/rubiojr/sup/internal/log"
 )
 
-type MeteoHandler struct{}
+type MeteoHandler struct {
+	cache cache.Cache
+}
 
 func (h *MeteoHandler) Name() string {
 	return "meteo"
@@ -21,6 +26,12 @@ func (h *MeteoHandler) Name() string {
 
 func (h *MeteoHandler) Topics() []string {
 	return []string{"meteo"}
+}
+
+func NewMeteoHandler(cache cache.Cache) *MeteoHandler {
+	return &MeteoHandler{
+		cache: cache,
+	}
 }
 
 func (h *MeteoHandler) HandleMessage(msg *events.Message) error {
@@ -39,7 +50,7 @@ func (h *MeteoHandler) HandleMessage(msg *events.Message) error {
 		text = strings.Join(parts[2:], " ")
 	}
 
-	fmt.Printf("Meteo command received from %s: %s\n", msg.Info.Chat.String(), text)
+	log.Debug("Meteo command received", "from", msg.Info.Chat.String(), "text", text)
 
 	c, err := client.GetClient()
 	if err != nil {
@@ -52,20 +63,63 @@ func (h *MeteoHandler) HandleMessage(msg *events.Message) error {
 		return nil
 	}
 
+	if f := h.forecastFromCache(cityName); f != nil {
+		return sendForecast(msg, c, f)
+	}
+
 	aemetClient, err := aemet.NewWithDefaults()
 	if err != nil {
-		fmt.Printf("Error creating AEMET client: %v\n", err)
+		log.Error("Error creating AEMET client", "error", err)
 		c.SendText(msg.Info.Chat, "🚫 Error connecting to weather service. Please make sure AEMET_API_KEY is set.")
 		return fmt.Errorf("error creating AEMET client: %w", err)
 	}
 
 	forecast, err := getForecastWithRetry(aemetClient, cityName)
 	if err != nil {
-		fmt.Printf("Error getting forecast for %s after retries: %v\n", cityName, err)
+		log.Error("Error getting forecast after retries", "city", cityName, "error", err)
 		c.SendText(msg.Info.Chat, fmt.Sprintf("🚫 Could not find weather data for '%s'. Please check the city name.", cityName))
 		return fmt.Errorf("error getting forecast: %w", err)
 	}
+	h.cacheForecast(cityName, forecast)
 
+	return sendForecast(msg, c, forecast)
+}
+
+func (h *MeteoHandler) forecastFromCache(cityName string) *aemet.Municipality {
+	cacheKey := fmt.Sprintf("%s", strings.ToLower(cityName))
+
+	data, err := h.cache.Get([]byte(cacheKey))
+	if err != nil {
+		return nil
+	}
+
+	var forecast aemet.Municipality
+	if err := json.Unmarshal(data, &forecast); err != nil {
+		return nil
+	}
+
+	log.Debug("Forecast found in cache", "city", cityName)
+	return &forecast
+}
+
+func (h *MeteoHandler) cacheForecast(cityName string, f *aemet.Municipality) {
+	cacheKey := fmt.Sprintf("%s", strings.ToLower(cityName))
+
+	data, err := json.Marshal(f)
+	if err != nil {
+		return
+	}
+
+	err = h.cache.Put([]byte(cacheKey), data)
+	if err != nil {
+		log.Debug("Failed to cache forecast", "city", cityName, "error", err)
+		return
+	}
+
+	log.Debug("Cached forecast", "city", cityName)
+}
+
+func sendForecast(msg *events.Message, c *client.Client, forecast *aemet.Municipality) error {
 	message := "🌤️  El tiempo hoy\n"
 	message += "==============================================\n"
 
@@ -108,7 +162,7 @@ func (h *MeteoHandler) HandleMessage(msg *events.Message) error {
 		message += fmt.Sprintf("%s %s: %s%s%s%s", "🗺️", forecast.Nombre, skyDescription, skyIcon, tempRange, windInfo)
 	}
 
-	err = c.SendText(msg.Info.Chat, message)
+	err := c.SendText(msg.Info.Chat, message)
 	if err != nil {
 		return fmt.Errorf("error sending message: %w", err)
 	}
@@ -164,7 +218,7 @@ func getForecastWithRetry(client *aemet.Client, cityName string) (*aemet.Municip
 		lastErr = err
 		if attempt < maxRetries-1 {
 			delay := time.Duration(attempt+1) * baseDelay
-			fmt.Printf("Attempt %d failed for %s, retrying in %v: %v\n", attempt+1, cityName, delay, err)
+			log.Warn("Attempt failed, retrying", "attempt", attempt+1, "city", cityName, "delay", delay, "error", err)
 			time.Sleep(delay)
 		}
 	}

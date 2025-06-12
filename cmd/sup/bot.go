@@ -41,7 +41,10 @@ func botCommand(ctx context.Context, cmd *cli.Command) error {
 	}
 	logger := log.Default()
 
-	botInstance := bot.New(bot.WithLogger(logger), bot.WithTrigger(t))
+	botInstance, err := bot.New(bot.WithLogger(logger), bot.WithTrigger(t))
+	if err != nil {
+		return err
+	}
 
 	// Register all handlers
 	if err := botInstance.RegisterDefaultHandlers(); err != nil {
@@ -56,23 +59,21 @@ func botCommand(ctx context.Context, cmd *cli.Command) error {
 }
 
 func registerHandlers(b *bot.Bot) error {
-	if err := b.RegisterHandler(&handlers.MeteoHandler{}); err != nil {
-		return err
-	}
-
-	dd, err := botfs.HandlerDataDir("image-downloader")
+	cache, err := b.Cache()
 	if err != nil {
 		return err
 	}
+	if err := b.RegisterHandler(handlers.NewMeteoHandler(cache.Namespace("meteo"))); err != nil {
+		return err
+	}
+
+	dd := botfs.HandlerDataDir("image-downloader")
 	imageDownloader := handlers.NewImageDownloaderHandler(dd)
 	if err := b.RegisterHandler(imageDownloader); err != nil {
 		return err
 	}
 
-	fd, err := botfs.HandlerDataDir("file-downloader")
-	if err != nil {
-		return err
-	}
+	fd := botfs.HandlerDataDir("file-downloader")
 	fileDownloader := handlers.NewFileDownloaderHandler(fd)
 	if err := b.RegisterHandler(fileDownloader); err != nil {
 		return err

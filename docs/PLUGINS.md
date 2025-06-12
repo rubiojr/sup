@@ -183,6 +183,10 @@ err := plugin.SendImage("recipient@s.whatsapp.net", "/path/to/image.jpg")
 
 // List directory contents
 files, err := plugin.ListDirectory("/path/to/directory")
+
+// Key value cache (1h expiration)
+err := plugin.SetCache("key", []byte("some value"))
+value, err := plugin.GetCache("key")
 ```
 
 > [!NOTE]
@@ -251,7 +255,6 @@ The `examples/plugins/` directory contains several example plugins:
 
 - **hello-simple/**: Minimal Go example using the PDK
 - **hello-javascript/**: JavaScript implementation example
-- **hello-zig/**: Zig implementation example
 - **wildcard-logger/**: Advanced example for logging all messages
 
 ## Security
@@ -314,14 +317,6 @@ Solution: Ensure your plugin's go.mod requires the correct version.
 3. Check plugin logs with `sup plugins list`
 4. Test plugin compilation with `sup plugins reload`
 
-## Documentation
+## Additional documentation
 
-- **Full PDK Guide**: `pkg/plugin/README.md`
-- **Examples**: `examples/plugins/README.md`
-- **Extism Docs**: https://extism.org/docs/
-
-## Community
-
-- **GitHub**: https://github.com/rubiojr/sup
-- **Issues**: https://github.com/rubiojr/sup/issues
-- **Examples**: https://github.com/rubiojr/sup/tree/main/examples/plugins
+- **Cache service**: [PLUGINS_CACHE.md](docs/PLUGINS_CACHE.md)
