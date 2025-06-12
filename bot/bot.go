@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -317,20 +318,12 @@ func (b *Bot) PluginManager() handlers.PluginManager {
 	return b.pluginManager
 }
 
-// SetCache stores a value in the bot's cache
-func (b *Bot) Cache(key string, value []byte) error {
+// Cache returns the cache service
+func (b *Bot) Cache() (Cache, error) {
 	if b.cache == nil {
-		return fmt.Errorf("cache not initialized")
+		return nil, errors.New("cache service not initialized")
 	}
-	return b.cache.Put([]byte(key), value)
-}
-
-// GetCache retrieves a value from the bot's cache
-func (b *Bot) GetCached(key string) ([]byte, error) {
-	if b.cache == nil {
-		return nil, fmt.Errorf("cache not initialized")
-	}
-	return b.cache.Get([]byte(key))
+	return b.cache, nil
 }
 
 // RegisterDefaultHandlers registers all available bot handlers with the given bot
