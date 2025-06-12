@@ -1,5 +1,5 @@
 package version
 
 var (
-	String = "0.2.1"
+	String = "0.3.0"
 )
