@@ -4,13 +4,15 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/rubiojr/sup/cache"
 )
 
 func TestNewCache(t *testing.T) {
 	tmpDir := t.TempDir()
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
@@ -32,7 +34,7 @@ func TestNewCacheWithExpiry(t *testing.T) {
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
 	customExpiry := 30 * time.Minute
-	cache, err := NewCache(cachePath, WithExpiry(customExpiry))
+	cache, err := cache.NewCache(cachePath, cache.WithExpiry(customExpiry))
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
@@ -53,7 +55,7 @@ func TestCachePutGet(t *testing.T) {
 	tmpDir := t.TempDir()
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
@@ -82,7 +84,7 @@ func TestCacheGetNonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
@@ -100,7 +102,7 @@ func TestCacheOverwrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
@@ -136,7 +138,7 @@ func TestCacheMultipleKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
@@ -172,7 +174,7 @@ func TestCacheEmptyKeyValue(t *testing.T) {
 	tmpDir := t.TempDir()
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
@@ -223,7 +225,7 @@ func TestCachePersistence(t *testing.T) {
 
 	// Create cache, put value, and close
 	{
-		cache, err := NewCache(cachePath)
+		cache, err := cache.NewCache(cachePath)
 		if err != nil {
 			t.Fatalf("NewCache() returned error: %v", err)
 		}
@@ -236,7 +238,7 @@ func TestCachePersistence(t *testing.T) {
 
 	// Create new cache instance and verify value persists
 	{
-		cache, err := NewCache(cachePath)
+		cache, err := cache.NewCache(cachePath)
 		if err != nil {
 			t.Fatalf("NewCache() for persistence test returned error: %v", err)
 		}
@@ -256,7 +258,7 @@ func TestCacheInvalidPath(t *testing.T) {
 	// Try to create cache in invalid directory
 	invalidPath := "/root/invalid/path/cache.db"
 
-	_, err := NewCache(invalidPath)
+	_, err := cache.NewCache(invalidPath)
 	if err == nil {
 		t.Fatal("Expected error for invalid cache path, got nil")
 	}
@@ -270,7 +272,7 @@ func TestWithExpiryOption(t *testing.T) {
 	expiry2 := 2 * time.Hour
 
 	// Test single expiry option
-	cache1, err := NewCache(cachePath, WithExpiry(expiry1))
+	cache1, err := cache.NewCache(cachePath, cache.WithExpiry(expiry1))
 	if err != nil {
 		t.Fatalf("NewCache() with expiry returned error: %v", err)
 	}
@@ -280,7 +282,7 @@ func TestWithExpiryOption(t *testing.T) {
 	}
 
 	// Test multiple options (last one should win)
-	cache2, err := NewCache(cachePath+"2", WithExpiry(expiry1), WithExpiry(expiry2))
+	cache2, err := cache.NewCache(cachePath+"2", cache.WithExpiry(expiry1), cache.WithExpiry(expiry2))
 	if err != nil {
 		t.Fatalf("NewCache() with multiple expiry options returned error: %v", err)
 	}
@@ -294,7 +296,7 @@ func TestCacheBinaryData(t *testing.T) {
 	tmpDir := t.TempDir()
 	cachePath := filepath.Join(tmpDir, "test_cache.db")
 
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}

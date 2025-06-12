@@ -1,0 +1,4 @@
+github.com/extism/go-pdk v1.1.3 h1:hfViMPWrqjN6u67cIYRALZTZLk/enSPpNKa+rZ9X2SQ=
+github.com/extism/go-pdk v1.1.3/go.mod h1:Gz+LIU/YCKnKXhgge8yo5Yu1F/lbv7KtKFkiCSzW/P4=
+github.com/rubiojr/sup v0.2.1 h1:hNeIotD+5aV2N4jbDK6mix90EtRphrFPd7zlxVdPREk=
+github.com/rubiojr/sup v0.2.1/go.mod h1:SgJSRsY3NFKYBjvexRHumSfrnLBmyk+5B9yaXuf+YWM=

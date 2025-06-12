@@ -9,12 +9,20 @@ import (
 	"strings"
 
 	extism "github.com/extism/go-sdk"
+	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/internal/client"
 	"github.com/rubiojr/sup/internal/log"
 	"github.com/tetratelabs/wazero"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
+
+// CacheResponse represents the response from cache operations
+type CacheResponse struct {
+	Success bool   `json:"success"`
+	Data    string `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
 
 type WasmHandler struct {
 	plugin  *extism.Plugin
@@ -61,7 +69,7 @@ type ListDirResponse struct {
 	Error   string   `json:"error,omitempty"`
 }
 
-func NewWasmHandler(wasmPath string) (*WasmHandler, error) {
+func NewWasmHandler(wasmPath string, cache cache.Cache) (*WasmHandler, error) {
 	ctx := context.Background()
 
 	// Calculate the plugin data directory
@@ -189,6 +197,27 @@ func NewWasmHandler(wasmPath string) (*WasmHandler, error) {
 			},
 			[]extism.ValueType{extism.ValueTypeI64},
 			[]extism.ValueType{extism.ValueTypeI64},
+		),
+		extism.NewHostFunctionWithStack(
+			"get_cache",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				// For temp plugin, return empty cache response
+				resp := CacheResponse{Success: false, Error: "Cache not available in temp plugin"}
+				respData, _ := json.Marshal(resp)
+				offset, _ := p.WriteString(string(respData))
+				stack[0] = offset
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI64},
+		),
+		extism.NewHostFunctionWithStack(
+			"set_cache",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				// For temp plugin, just return success without actually setting
+				stack[0] = extism.EncodeU32(0) // success
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI32},
 		),
 	}
 
@@ -403,6 +432,105 @@ func NewWasmHandler(wasmPath string) (*WasmHandler, error) {
 			},
 			[]extism.ValueType{extism.ValueTypeI64},
 			[]extism.ValueType{extism.ValueTypeI64},
+		),
+		extism.NewHostFunctionWithStack(
+			"get_cache",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				// Get the key string from memory
+				keyOffset := extism.DecodeU32(stack[0])
+				key, err := p.ReadString(uint64(keyOffset))
+				if err != nil {
+					resp := CacheResponse{Success: false, Error: "Failed to read key"}
+					respData, _ := json.Marshal(resp)
+					offset, _ := p.WriteString(string(respData))
+					stack[0] = offset
+					return
+				}
+
+				log.Debug("Plugin getting cache value", "key", key)
+
+				// Get value from cache
+				var value []byte
+				if cache != nil {
+					value, err = cache.Get([]byte(key))
+					if err != nil {
+						log.Debug("Plugin cache get failed", "key", key, "error", err)
+						resp := CacheResponse{Success: false, Error: err.Error()}
+						respData, _ := json.Marshal(resp)
+						offset, _ := p.WriteString(string(respData))
+						stack[0] = offset
+						return
+					}
+					log.Debug("Plugin cache get success", "key", key, "value", string(value), "raw_bytes", value)
+				} else {
+					resp := CacheResponse{Success: false, Error: "Cache not available"}
+					respData, _ := json.Marshal(resp)
+					offset, _ := p.WriteString(string(respData))
+					stack[0] = offset
+					return
+				}
+
+				// Return successful response with data
+				resp := CacheResponse{Success: true, Data: string(value)}
+				respData, _ := json.Marshal(resp)
+				offset, _ := p.WriteString(string(respData))
+				stack[0] = offset
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI64},
+		),
+		extism.NewHostFunctionWithStack(
+			"set_cache",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				// Get the request data from memory
+				dataOffset := extism.DecodeU32(stack[0])
+				requestData, err := p.ReadBytes(uint64(dataOffset))
+				if err != nil {
+					stack[0] = extism.EncodeU32(1) // error
+					return
+				}
+
+				var req map[string]interface{}
+				if err := json.Unmarshal(requestData, &req); err != nil {
+					stack[0] = extism.EncodeU32(1) // error
+					return
+				}
+
+				key, ok := req["key"].(string)
+				if !ok {
+					stack[0] = extism.EncodeU32(1) // error
+					return
+				}
+
+				// Handle value as string
+				var value []byte
+				if v, ok := req["value"].(string); ok {
+					value = []byte(v)
+				} else {
+					stack[0] = extism.EncodeU32(1) // error
+					return
+				}
+
+				log.Debug("Plugin setting cache value", "key", key, "value", string(value), "raw_bytes", value)
+
+				// Set value in cache
+				if cache != nil {
+					err = cache.Put([]byte(key), value)
+					if err != nil {
+						log.Debug("Plugin cache put failed", "key", key, "error", err)
+						stack[0] = extism.EncodeU32(1) // error
+						return
+					}
+					log.Debug("Plugin cache put success", "key", key)
+				} else {
+					stack[0] = extism.EncodeU32(1) // error - cache not available
+					return
+				}
+
+				stack[0] = extism.EncodeU32(0) // success
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI32},
 		),
 	}
 

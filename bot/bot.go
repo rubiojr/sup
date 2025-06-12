@@ -15,6 +15,7 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/internal/botfs"
 	"github.com/rubiojr/sup/internal/client"
 )
@@ -27,7 +28,7 @@ type Bot struct {
 	pluginManager handlers.PluginManager
 	logger        *slog.Logger
 	trigger       string
-	cache         Cache
+	cache         cache.Cache
 }
 
 // Option is a function that configures the Bot
@@ -75,9 +76,10 @@ func WithPluginManager(pm handlers.PluginManager) Option {
 
 // WithCache sets a custom cache for the bot.
 // If not provided, the bot will create a default cache.
-func WithCache(cache Cache) Option {
+func WithCache(cache cache.Cache) Option {
 	return func(b *Bot) {
 		b.cache = cache
+		b.pluginManager.SetCache(cache)
 	}
 }
 
@@ -124,7 +126,7 @@ func New(opts ...Option) (*Bot, error) {
 		if err != nil {
 			return nil, err
 		}
-		cache, err := NewCache(cachePath)
+		cache, err := cache.NewCache(cachePath)
 		if err != nil {
 			b.logger.Warn("Failed to initialize default cache", "error", err)
 			return nil, err
@@ -135,6 +137,9 @@ func New(opts ...Option) (*Bot, error) {
 	}
 
 	if b.pluginManager != nil {
+		// Set cache on plugin manager
+		b.pluginManager.SetCache(b.cache)
+
 		// Load WASM plugins
 		if err := b.pluginManager.LoadPlugins(); err != nil {
 			b.logger.Warn("Failed to load WASM plugins", "error", err)
@@ -319,7 +324,7 @@ func (b *Bot) PluginManager() handlers.PluginManager {
 }
 
 // Cache returns the cache service
-func (b *Bot) Cache() (Cache, error) {
+func (b *Bot) Cache() (cache.Cache, error) {
 	if b.cache == nil {
 		return nil, errors.New("cache service not initialized")
 	}

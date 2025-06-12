@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/internal/log"
 )
 
@@ -16,11 +17,13 @@ type PluginManager interface {
 	GetPlugin(name string) (*WasmHandler, bool)
 	UnloadAll() error
 	UnloadPlugin(name string) error
+	SetCache(cache cache.Cache)
 }
 
 type pluginManager struct {
 	pluginDir string
 	plugins   map[string]*WasmHandler
+	cache     cache.Cache
 }
 
 func NewPluginManager(pluginDir string) PluginManager {
@@ -28,6 +31,10 @@ func NewPluginManager(pluginDir string) PluginManager {
 		pluginDir: pluginDir,
 		plugins:   make(map[string]*WasmHandler),
 	}
+}
+
+func (pm *pluginManager) SetCache(cache cache.Cache) {
+	pm.cache = cache
 }
 
 func DefaultPluginManager() PluginManager {
@@ -70,7 +77,7 @@ func (pm *pluginManager) LoadPlugins() error {
 }
 
 func (pm *pluginManager) loadPlugin(pluginPath string) error {
-	handler, err := NewWasmHandler(pluginPath)
+	handler, err := NewWasmHandler(pluginPath, pm.cache)
 	if err != nil {
 		return fmt.Errorf("failed to create WASM handler: %w", err)
 	}

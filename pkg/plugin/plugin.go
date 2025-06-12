@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/extism/go-pdk"
+	"github.com/rubiojr/sup/internal/log"
 )
 
 // MessageInfo contains information about the incoming message
@@ -226,6 +227,12 @@ func hostSendImage(dataPtr uint64) uint32
 //go:wasmimport extism:host/user list_directory
 func hostListDirectory(pathPtr uint64) uint64
 
+//go:wasmimport extism:host/user get_cache
+func hostGetCache(keyPtr uint64) uint64
+
+//go:wasmimport extism:host/user set_cache
+func hostSetCache(dataPtr uint64) uint32
+
 // ReadFile reads a file from the host and returns its contents as bytes
 func ReadFile(path string) ([]byte, error) {
 	// Allocate memory for the path string
@@ -301,4 +308,65 @@ func ListDirectory(path string) ([]string, error) {
 	}
 
 	return response.Files, nil
+}
+
+// CacheResponse represents the response from cache operations
+type CacheResponse struct {
+	Success bool   `json:"success"`
+	Data    string `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// GetCache retrieves a value from the cache by key
+func GetCache(key string) ([]byte, error) {
+	// Allocate memory for the key string
+	keyMem := pdk.AllocateString(key)
+
+	// Call the host function
+	resultMem := hostGetCache(keyMem.Offset())
+
+	// Read the result
+	data := pdk.FindMemory(resultMem)
+	if data.Length() == 0 {
+		return nil, fmt.Errorf("failed to get cache value for key %s", key)
+	}
+
+	// Parse the JSON response
+	var response CacheResponse
+	err := json.Unmarshal(data.ReadBytes(), &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse cache response: %w", err)
+	}
+
+	if !response.Success {
+		return nil, fmt.Errorf("cache get failed: %s", response.Error)
+	}
+
+	return []byte(response.Data), nil
+}
+
+// SetCache stores a value in the cache with the given key
+func SetCache(key string, value []byte) error {
+	log.Debug("foo")
+	// Create the request data
+	request := map[string]interface{}{
+		"key":   key,
+		"value": string(value),
+	}
+
+	requestData, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cache request: %w", err)
+	}
+
+	// Allocate memory for the request data
+	dataMem := pdk.AllocateBytes(requestData)
+
+	// Call the host function
+	result := hostSetCache(dataMem.Offset())
+	if result != 0 {
+		return fmt.Errorf("failed to set cache value, error code: %d", result)
+	}
+
+	return nil
 }

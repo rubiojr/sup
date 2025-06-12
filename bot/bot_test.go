@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cache"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -192,7 +193,7 @@ func TestBotCache(t *testing.T) {
 	cachePath := filepath.Join(tmpDir, "bot_cache.db")
 
 	// Create cache for bot
-	cache, err := NewCache(cachePath)
+	cache, err := cache.NewCache(cachePath)
 	if err != nil {
 		t.Fatalf("NewCache() returned error: %v", err)
 	}
