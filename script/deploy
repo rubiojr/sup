@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+git pull
+./script/install-plugins
+# CGO enabled so we can use landlock for sandboxing
+go install ./cmd/sup
+systemctl --user restart sup
+journalctl --user -f -u sup
