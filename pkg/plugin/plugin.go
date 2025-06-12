@@ -310,8 +310,8 @@ func ListDirectory(path string) ([]string, error) {
 	return response.Files, nil
 }
 
-// CacheResponse represents the response from cache operations
-type CacheResponse struct {
+// cacheResponse represents the response from cache operations
+type cacheResponse struct {
 	Success bool   `json:"success"`
 	Data    string `json:"data,omitempty"`
 	Error   string `json:"error,omitempty"`
@@ -332,7 +332,7 @@ func GetCache(key string) ([]byte, error) {
 	}
 
 	// Parse the JSON response
-	var response CacheResponse
+	var response cacheResponse
 	err := json.Unmarshal(data.ReadBytes(), &response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse cache response: %w", err)
