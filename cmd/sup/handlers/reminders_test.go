@@ -1090,3 +1090,413 @@ func TestRemindersHandler_SecondPrecisionTriggering(t *testing.T) {
 		}
 	}
 }
+
+func TestRemindersHandler_ExtractPhoneNumber(t *testing.T) {
+	handler := &RemindersHandler{}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "JID with device ID",
+			input:    "34633010091:68@s.whatsapp.net",
+			expected: "34633010091",
+		},
+		{
+			name:     "JID without device ID",
+			input:    "34633010091@s.whatsapp.net",
+			expected: "34633010091",
+		},
+		{
+			name:     "Group JID",
+			input:    "120363123456789@g.us",
+			expected: "120363123456789",
+		},
+		{
+			name:     "Just phone number",
+			input:    "34633010091",
+			expected: "34633010091",
+		},
+		{
+			name:     "Complex device ID",
+			input:    "1234567890:99@s.whatsapp.net",
+			expected: "1234567890",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.extractPhoneNumber(tt.input)
+			if result != tt.expected {
+				t.Errorf("extractPhoneNumber(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRemindersHandler_CreatedByField(t *testing.T) {
+	store := newMockStore()
+	handler := &RemindersHandler{
+		store: store,
+	}
+
+	w := when.New(nil)
+	w.Add(en.All...)
+	w.Add(common.All...)
+	handler.parser = w
+
+	sender := "user123@s.whatsapp.net"
+	chatID := "user123@s.whatsapp.net"
+
+	reminder := Reminder{
+		ID:          "test-reminder-1",
+		Description: "Test reminder",
+		RemindAt:    time.Now().Add(time.Hour),
+		CreatedAt:   time.Now(),
+		Triggered:   false,
+		ChatID:      chatID,
+		CreatedBy:   sender,
+	}
+
+	err := handler.saveReminder(sender, reminder)
+	if err != nil {
+		t.Fatalf("Failed to save reminder: %v", err)
+	}
+
+	reminders, err := handler.getReminders(sender)
+	if err != nil {
+		t.Fatalf("Failed to get reminders: %v", err)
+	}
+
+	if len(reminders) != 1 {
+		t.Fatalf("Expected 1 reminder, got %d", len(reminders))
+	}
+
+	if reminders[0].CreatedBy != sender {
+		t.Errorf("Expected CreatedBy to be %q, got %q", sender, reminders[0].CreatedBy)
+	}
+}
+
+func TestRemindersHandler_GroupNameField(t *testing.T) {
+	store := newMockStore()
+	handler := &RemindersHandler{
+		store: store,
+	}
+
+	w := when.New(nil)
+	w.Add(en.All...)
+	w.Add(common.All...)
+	handler.parser = w
+
+	sender := "user123@s.whatsapp.net"
+	groupChatID := "120363123456789@g.us"
+	groupName := "Test Group"
+
+	reminder := Reminder{
+		ID:          "test-reminder-1",
+		Description: "Test group reminder",
+		RemindAt:    time.Now().Add(time.Hour),
+		CreatedAt:   time.Now(),
+		Triggered:   false,
+		ChatID:      groupChatID,
+		CreatedBy:   sender,
+		GroupName:   groupName,
+	}
+
+	groupKey := fmt.Sprintf("group:%s", groupChatID)
+	err := handler.saveReminder(groupKey, reminder)
+	if err != nil {
+		t.Fatalf("Failed to save group reminder: %v", err)
+	}
+
+	reminders, err := handler.getReminders(groupKey)
+	if err != nil {
+		t.Fatalf("Failed to get group reminders: %v", err)
+	}
+
+	if len(reminders) != 1 {
+		t.Fatalf("Expected 1 reminder, got %d", len(reminders))
+	}
+
+	if reminders[0].GroupName != groupName {
+		t.Errorf("Expected GroupName to be %q, got %q", groupName, reminders[0].GroupName)
+	}
+
+	if reminders[0].CreatedBy != sender {
+		t.Errorf("Expected CreatedBy to be %q, got %q", sender, reminders[0].CreatedBy)
+	}
+}
+
+func TestRemindersHandler_GetAllUserReminders(t *testing.T) {
+	store := newMockStore()
+	handler := &RemindersHandler{
+		store: store,
+	}
+
+	w := when.New(nil)
+	w.Add(en.All...)
+	w.Add(common.All...)
+	handler.parser = w
+
+	user1 := "user1@s.whatsapp.net"
+	user2 := "user2@s.whatsapp.net"
+	groupChatID := "120363123456789@g.us"
+
+	// Create reminders for user1 in private chat
+	privateReminder := Reminder{
+		ID:          "private-reminder",
+		Description: "Private reminder",
+		RemindAt:    time.Now().Add(time.Hour),
+		CreatedAt:   time.Now(),
+		Triggered:   false,
+		ChatID:      user1,
+		CreatedBy:   user1,
+	}
+	handler.saveReminder(user1, privateReminder)
+
+	// Create reminders for user1 in group chat
+	groupReminder := Reminder{
+		ID:          "group-reminder",
+		Description: "Group reminder",
+		RemindAt:    time.Now().Add(time.Hour),
+		CreatedAt:   time.Now(),
+		Triggered:   false,
+		ChatID:      groupChatID,
+		CreatedBy:   user1,
+		GroupName:   "Test Group",
+	}
+	groupKey := fmt.Sprintf("group:%s", groupChatID)
+	handler.saveReminder(groupKey, groupReminder)
+
+	// Create reminder for user2 in the same group
+	user2GroupReminder := Reminder{
+		ID:          "user2-group-reminder",
+		Description: "User2 group reminder",
+		RemindAt:    time.Now().Add(time.Hour),
+		CreatedAt:   time.Now(),
+		Triggered:   false,
+		ChatID:      groupChatID,
+		CreatedBy:   user2,
+		GroupName:   "Test Group",
+	}
+	handler.saveReminder(groupKey, user2GroupReminder)
+
+	// Get all reminders for user1
+	user1Reminders, err := handler.getAllUserReminders(user1)
+	if err != nil {
+		t.Fatalf("Failed to get all user reminders: %v", err)
+	}
+
+	// Should get 2 reminders (private + group created by user1)
+	if len(user1Reminders) != 2 {
+		t.Fatalf("Expected 2 reminders for user1, got %d", len(user1Reminders))
+	}
+
+	// Verify all reminders belong to user1
+	for _, reminder := range user1Reminders {
+		if reminder.CreatedBy != user1 {
+			t.Errorf("Expected all reminders to be created by %q, got reminder created by %q", user1, reminder.CreatedBy)
+		}
+	}
+
+	// Verify we have both private and group reminders
+	hasPrivate := false
+	hasGroup := false
+	for _, reminder := range user1Reminders {
+		if reminder.ID == "private-reminder" {
+			hasPrivate = true
+		}
+		if reminder.ID == "group-reminder" {
+			hasGroup = true
+		}
+	}
+
+	if !hasPrivate {
+		t.Error("Expected to find private reminder")
+	}
+	if !hasGroup {
+		t.Error("Expected to find group reminder")
+	}
+}
+
+func TestRemindersHandler_GetChatInfo(t *testing.T) {
+	handler := &RemindersHandler{}
+
+	tests := []struct {
+		name      string
+		chatID    string
+		groupName string
+		expected  string
+	}{
+		{
+			name:      "Group chat with name",
+			chatID:    "120363123456789@g.us",
+			groupName: "Family Group",
+			expected:  "(group: Family Group)",
+		},
+		{
+			name:      "Group chat without name",
+			chatID:    "120363123456789@g.us",
+			groupName: "",
+			expected:  "(group)",
+		},
+		{
+			name:      "Private chat",
+			chatID:    "34633010091@s.whatsapp.net",
+			groupName: "",
+			expected:  "(private)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.getChatInfo(tt.chatID, tt.groupName)
+			if result != tt.expected {
+				t.Errorf("getChatInfo(%q, %q) = %q, want %q", tt.chatID, tt.groupName, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRemindersHandler_OwnChatDetection(t *testing.T) {
+	store := newMockStore()
+	handler := &RemindersHandler{
+		store: store,
+	}
+
+	w := when.New(nil)
+	w.Add(en.All...)
+	w.Add(common.All...)
+	handler.parser = w
+
+	// Test data
+	userPhone := "34633010091"
+	senderWithDevice := "34633010091:68@s.whatsapp.net"
+	chatWithoutDevice := "34633010091@s.whatsapp.net"
+
+	// Create reminders in different contexts
+	privateReminder := Reminder{
+		ID:          "private-reminder",
+		Description: "Private reminder",
+		RemindAt:    time.Now().Add(time.Hour),
+		CreatedAt:   time.Now(),
+		Triggered:   false,
+		ChatID:      chatWithoutDevice,
+		CreatedBy:   senderWithDevice,
+	}
+	handler.saveReminder(senderWithDevice, privateReminder)
+
+	groupReminder := Reminder{
+		ID:          "group-reminder",
+		Description: "Group reminder",
+		RemindAt:    time.Now().Add(time.Hour),
+		CreatedAt:   time.Now(),
+		Triggered:   false,
+		ChatID:      "120363123456789@g.us",
+		CreatedBy:   senderWithDevice,
+		GroupName:   "Test Group",
+	}
+	groupKey := "group:120363123456789@g.us"
+	handler.saveReminder(groupKey, groupReminder)
+
+	// Test phone number extraction
+	extractedSender := handler.extractPhoneNumber(senderWithDevice)
+	extractedChat := handler.extractPhoneNumber(chatWithoutDevice)
+
+	if extractedSender != userPhone {
+		t.Errorf("Expected extracted sender to be %q, got %q", userPhone, extractedSender)
+	}
+
+	if extractedChat != userPhone {
+		t.Errorf("Expected extracted chat to be %q, got %q", userPhone, extractedChat)
+	}
+
+	// Test that own chat detection works (sender phone == chat phone)
+	isOwnChat := extractedSender == extractedChat
+	if !isOwnChat {
+		t.Error("Expected own chat detection to work with device ID in sender")
+	}
+
+	// Test getAllUserReminders works correctly
+	allReminders, err := handler.getAllUserReminders(senderWithDevice)
+	if err != nil {
+		t.Fatalf("Failed to get all user reminders: %v", err)
+	}
+
+	if len(allReminders) != 2 {
+		t.Fatalf("Expected 2 reminders, got %d", len(allReminders))
+	}
+
+	// Verify both reminders are returned
+	hasPrivate := false
+	hasGroup := false
+	for _, reminder := range allReminders {
+		if reminder.ID == "private-reminder" {
+			hasPrivate = true
+		}
+		if reminder.ID == "group-reminder" {
+			hasGroup = true
+		}
+	}
+
+	if !hasPrivate {
+		t.Error("Expected to find private reminder")
+	}
+	if !hasGroup {
+		t.Error("Expected to find group reminder")
+	}
+}
+
+func TestRemindersHandler_JSONSerialization_WithNewFields(t *testing.T) {
+	reminder := Reminder{
+		ID:          "test-id",
+		Description: "Test description",
+		RemindAt:    time.Date(2023, 12, 31, 23, 59, 59, 0, time.UTC),
+		CreatedAt:   time.Date(2023, 12, 31, 12, 0, 0, 0, time.UTC),
+		Triggered:   false,
+		ChatID:      "120363123456789@g.us",
+		CreatedBy:   "user123@s.whatsapp.net",
+		GroupName:   "Test Group Name",
+	}
+
+	// Test JSON marshaling
+	data, err := json.Marshal(reminder)
+	if err != nil {
+		t.Fatalf("Failed to marshal reminder: %v", err)
+	}
+
+	// Test JSON unmarshaling
+	var unmarshaled Reminder
+	err = json.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal reminder: %v", err)
+	}
+
+	// Verify all fields are preserved
+	if unmarshaled.ID != reminder.ID {
+		t.Errorf("ID mismatch: expected %q, got %q", reminder.ID, unmarshaled.ID)
+	}
+	if unmarshaled.Description != reminder.Description {
+		t.Errorf("Description mismatch: expected %q, got %q", reminder.Description, unmarshaled.Description)
+	}
+	if !unmarshaled.RemindAt.Equal(reminder.RemindAt) {
+		t.Errorf("RemindAt mismatch: expected %v, got %v", reminder.RemindAt, unmarshaled.RemindAt)
+	}
+	if !unmarshaled.CreatedAt.Equal(reminder.CreatedAt) {
+		t.Errorf("CreatedAt mismatch: expected %v, got %v", reminder.CreatedAt, unmarshaled.CreatedAt)
+	}
+	if unmarshaled.Triggered != reminder.Triggered {
+		t.Errorf("Triggered mismatch: expected %v, got %v", reminder.Triggered, unmarshaled.Triggered)
+	}
+	if unmarshaled.ChatID != reminder.ChatID {
+		t.Errorf("ChatID mismatch: expected %q, got %q", reminder.ChatID, unmarshaled.ChatID)
+	}
+	if unmarshaled.CreatedBy != reminder.CreatedBy {
+		t.Errorf("CreatedBy mismatch: expected %q, got %q", reminder.CreatedBy, unmarshaled.CreatedBy)
+	}
+	if unmarshaled.GroupName != reminder.GroupName {
+		t.Errorf("GroupName mismatch: expected %q, got %q", reminder.GroupName, unmarshaled.GroupName)
+	}
+}
