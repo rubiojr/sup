@@ -20,6 +20,7 @@ func main() {
 			sendFileCmd,
 			sendCmd,
 			sendImageCmd,
+			sendAudioCmd,
 			sendClipboardCmd,
 			botCmd,
 			pluginsCmd,

@@ -194,6 +194,40 @@ func (c *Client) SendImage(recipientJID types.JID, imagePath string) error {
 	return nil
 }
 
+func (c *Client) SendAudio(recipientJID types.JID, audioPath string) error {
+	data, err := os.ReadFile(audioPath)
+	if err != nil {
+		return fmt.Errorf("failed to read audio file: %w", err)
+	}
+
+	uploaded, err := c.whatsmeowClient.Upload(context.Background(), data, whatsmeow.MediaAudio)
+	if err != nil {
+		return fmt.Errorf("failed to upload audio: %w", err)
+	}
+
+	mimeType := getMimeType(audioPath)
+
+	msg := &waE2E.Message{
+		AudioMessage: &waE2E.AudioMessage{
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			FileLength:    proto.Uint64(uint64(len(data))),
+			FileSHA256:    uploaded.FileSHA256,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			Mimetype:      proto.String(mimeType),
+			PTT:           proto.Bool(false), // Set to true for voice notes
+		},
+	}
+
+	_, err = c.whatsmeowClient.SendMessage(context.Background(), recipientJID, msg)
+	if err != nil {
+		return fmt.Errorf("failed to send audio message: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) GetJoinedGroups() ([]*types.GroupInfo, error) {
 	return c.whatsmeowClient.GetJoinedGroups()
 }
@@ -282,6 +316,16 @@ func getMimeType(filePath string) string {
 		return "video/mp4"
 	case ".mp3":
 		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a":
+		return "audio/m4a"
+	case ".ogg":
+		return "audio/ogg"
+	case ".aac":
+		return "audio/aac"
+	case ".flac":
+		return "audio/flac"
 	case ".zip":
 		return "application/zip"
 	case ".doc":
