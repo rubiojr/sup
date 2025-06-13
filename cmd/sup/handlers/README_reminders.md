@@ -118,7 +118,7 @@ When a reminder becomes due, the bot automatically sends a notification **to the
 - **Individual Storage**: `{sender}:reminders` for private chats
 - **Group Storage**: `group:{chat_id}:reminders` for group chats
 - **Index**: Maintains a `reminder_keys_index` to track all active reminder keys
-- **Cleanup**: Automatically removes past reminders (older than 24 hours after trigger)
+- **Cleanup**: Automatically removes all past reminders immediately when accessed
 
 ## Reminder Structure
 
@@ -196,6 +196,7 @@ Since the store doesn't support key enumeration, the handler maintains a separat
 - Cron job errors are logged but don't crash the bot
 - Missing or invalid chat IDs are logged and safely skipped
 - Chat ID validation prevents reminders from being created without proper delivery context
+- Aggressive cleanup removes all past reminders to keep lists current
 
 ## Limitations
 
@@ -204,6 +205,7 @@ Since the store doesn't support key enumeration, the handler maintains a separat
 - Background checking runs every second (may be overkill)
 - User enumeration requires maintaining a separate index
 - No recurring reminder support
+- Past reminders are immediately removed (no history preservation)
 
 ## Development Notes
 

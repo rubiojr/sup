@@ -332,6 +332,9 @@ func (h *RemindersHandler) checkAllReminders() {
 }
 
 func (h *RemindersHandler) checkAndNotifyUser(c *client.Client, reminderKey string) {
+	// First run garbage collection to clean up old reminders
+	h.garbageCollect(reminderKey)
+
 	reminders, err := h.getReminders(reminderKey)
 	if err != nil {
 		log.Error("Failed to get reminders for key", "reminderKey", reminderKey, "error", err)
@@ -450,14 +453,21 @@ func (h *RemindersHandler) garbageCollect(reminderKey string) {
 
 	now := time.Now()
 	var activeReminders []Reminder
+	removedCount := 0
 
 	for _, reminder := range reminders {
-		if reminder.RemindAt.After(now.Add(-24*time.Hour)) || !reminder.Triggered {
+		// Only keep reminders that are in the future (not yet due)
+		// Remove all past reminders regardless of triggered status
+		if reminder.RemindAt.After(now) {
 			activeReminders = append(activeReminders, reminder)
+		} else {
+			removedCount++
+			log.Debug("Garbage collecting past reminder", "reminderKey", reminderKey, "reminderID", reminder.ID, "remindAt", reminder.RemindAt, "triggered", reminder.Triggered)
 		}
 	}
 
 	if len(activeReminders) != len(reminders) {
+		log.Debug("Garbage collection completed", "reminderKey", reminderKey, "removed", removedCount, "remaining", len(activeReminders))
 		h.saveReminders(reminderKey, activeReminders)
 
 		// If no reminders left, remove key from index
