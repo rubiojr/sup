@@ -22,3 +22,7 @@ When writing code:
 * Plugins are essentially Handlers loaded externally, not built-in. Their interface lives in pkg/plugin
 * Plugins are WASM modules
 * Plugins can be written in any language supported by Extistm (https://extism.org/docs/quickstart/plugin-quickstart) and live in /plugins
+
+When testing:
+
+* run script/test to test all the code, including pkg/plugin
