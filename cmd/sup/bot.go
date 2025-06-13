@@ -67,6 +67,14 @@ func registerHandlers(b *bot.Bot) error {
 		return err
 	}
 
+	store, err := b.Store()
+	if err != nil {
+		return err
+	}
+	if err := b.RegisterHandler(handlers.NewRemindersHandler(store.Namespace("reminders"))); err != nil {
+		return err
+	}
+
 	dd := botfs.HandlerDataDir("image-downloader")
 	imageDownloader := handlers.NewImageDownloaderHandler(dd)
 	if err := b.RegisterHandler(imageDownloader); err != nil {
