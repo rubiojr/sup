@@ -229,6 +229,86 @@ func TestBotCache(t *testing.T) {
 	}
 }
 
+func TestBotStore(t *testing.T) {
+	bot, err := New()
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	key := "test_bot_store_key"
+	value := []byte("test_bot_store_value")
+
+	// Test Store
+	botStore, err := bot.Store()
+	if err != nil {
+		t.Fatalf("Store() returned error: %v", err)
+	}
+
+	err = botStore.Put([]byte(key), value)
+	if err != nil {
+		t.Fatalf("Store.Put() returned error: %v", err)
+	}
+
+	// Test Get
+	retrievedValue, err := botStore.Get([]byte(key))
+	if err != nil {
+		t.Fatalf("Store.Get() returned error: %v", err)
+	}
+
+	if string(retrievedValue) != string(value) {
+		t.Errorf("Expected value %s, got %s", string(value), string(retrievedValue))
+	}
+
+	// Test persistence - update the value
+	newValue := []byte("updated_store_value")
+	err = botStore.Put([]byte(key), newValue)
+	if err != nil {
+		t.Fatalf("Store.Put() update returned error: %v", err)
+	}
+
+	// Verify the update
+	updatedValue, err := botStore.Get([]byte(key))
+	if err != nil {
+		t.Fatalf("Store.Get() after update returned error: %v", err)
+	}
+
+	if string(updatedValue) != string(newValue) {
+		t.Errorf("Expected updated value %s, got %s", string(newValue), string(updatedValue))
+	}
+
+	// Test namespace isolation
+	namespaced := botStore.Namespace("test")
+	err = namespaced.Put([]byte(key), value)
+	if err != nil {
+		t.Fatalf("Namespaced store Put() returned error: %v", err)
+	}
+
+	// Verify namespaced value doesn't affect main store
+	mainValue, err := botStore.Get([]byte(key))
+	if err != nil {
+		t.Fatalf("Store.Get() from main after namespace put returned error: %v", err)
+	}
+
+	if string(mainValue) != string(newValue) {
+		t.Errorf("Namespace isolation failed: expected %s, got %s", string(newValue), string(mainValue))
+	}
+}
+
+func TestBotStoreNotInitialized(t *testing.T) {
+	// Create bot without store (should fail with store disabled)
+	// This test is tricky because New() always initializes a store now
+	// We need to create a bot with a nil store directly
+	bot := &Bot{
+		store: nil,
+	}
+
+	// Test Store with nil store
+	_, err := bot.Store()
+	if err == nil {
+		t.Fatal("Expected error for Store() with nil store, got nil")
+	}
+}
+
 func TestBotCacheNotInitialized(t *testing.T) {
 	// Create bot without cache (should fail with cache disabled)
 	// This test is tricky because New() always initializes a cache now

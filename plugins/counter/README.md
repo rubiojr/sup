@@ -1,79 +1,101 @@
 # Counter Plugin
 
-A simple plugin for the [sup](https://github.com/rubiojr/sup) WhatsApp bot that demonstrates the use of the cache API to create persistent counters.
+A WhatsApp bot plugin that manages counters for users. This plugin uses the bot's store functionality to ensure counters never expire and persist across bot restarts.
 
 ## Features
 
-- Create and manage multiple named counters
-- Increment, decrement, and reset counters
-- Persistent storage using the sup cache system
-- Per-user counters (each user has their own set of counters)
+- **Persistent Storage**: Counters are stored permanently using the bot's store and never expire
+- **Per-User Counters**: Each user can have their own set of counters
+- **Named Counters**: Support for multiple named counters per user
+- **Basic Operations**: Increment, decrement, reset, and view counter values
 
-## Installation
+## Commands
 
-### Using the Makefile
+All commands start with `.sup counter`:
 
-```bash
-# Build the plugin
-make build
+- `.sup counter` - Show the default counter value
+- `.sup counter [name]` - Show the value of a named counter
+- `.sup counter increment [name]` - Increment counter (aliases: `inc`, `+`)
+- `.sup counter decrement [name]` - Decrement counter (aliases: `dec`, `-`)
+- `.sup counter reset [name]` - Reset counter to 0
+- `.sup counter list` - List all counters (not yet implemented)
 
-# Install the plugin
-make install
-
-# Or use the sup script to install
-make script-install
-```
-
-### Manual Installation
-
-```bash
-# Build the plugin
-tinygo build -target=wasi -o counter.wasm
-
-# Copy to the plugins directory
-mkdir -p ~/.local/share/sup/plugins
-cp counter.wasm ~/.local/share/sup/plugins/
-```
-
-## Usage
-
-The counter plugin supports the following commands:
-
-| Command | Description |
-|---------|-------------|
-| `.sup counter` | Display the value of your default counter |
-| `.sup counter [name]` | Display the value of a named counter |
-| `.sup counter increment [name]` | Increment a counter (name is optional) |
-| `.sup counter inc [name]` | Shorthand for increment |
-| `.sup counter + [name]` | Shorthand for increment |
-| `.sup counter decrement [name]` | Decrement a counter (name is optional) |
-| `.sup counter dec [name]` | Shorthand for decrement |
-| `.sup counter - [name]` | Shorthand for decrement |
-| `.sup counter reset [name]` | Reset a counter to zero (name is optional) |
+If no counter name is provided, the plugin uses "default" as the counter name.
 
 ## Examples
 
 ```
-.sup counter                     # Show default counter
-.sup counter mycount             # Show counter named "mycount"
-.sup counter increment           # Increment default counter
-.sup counter + mycount           # Increment counter named "mycount"
-.sup counter decrement mycount   # Decrement counter named "mycount"
-.sup counter - mycount           # Decrement counter named "mycount"
-.sup counter reset mycount       # Reset counter named "mycount" to zero
+.sup counter
+# Output: Counter value: 0 (not set)
+
+.sup counter increment
+# Output: Counter incremented to 1
+
+.sup counter + mycount
+# Output: Counter incremented to 1
+
+.sup counter mycount
+# Output: Counter value: 1
+
+.sup counter reset mycount
+# Output: Counter reset to 0
 ```
+
+## Storage Details
+
+- **Persistence**: Uses the bot's store (no expiry) instead of cache (with expiry)
+- **Storage**: Data is stored in the bot's permanent store database
+- **Reliability**: Counters survive bot restarts and system reboots
+
+## Building and Installation
+
+### Prerequisites
+
+- [TinyGo](https://tinygo.org/) for building WASM modules
+- Go 1.21 or later
+
+### Build
+
+```bash
+make build
+```
+
+This creates `counter.wasm` in the current directory.
+
+### Install
+
+```bash
+make install
+```
+
+This builds the plugin and copies it to `~/.local/share/sup/plugins/`.
+
+### Test
+
+```bash
+make test
+```
+
+Requires the [Extism CLI](https://extism.org/docs/install) to be installed.
 
 ## Technical Details
 
-This plugin demonstrates the use of the cache API provided by the sup bot framework. The cache is used to store counter values with the following characteristics:
+- **Language**: Go
+- **Target**: WebAssembly (WASI)
+- **Storage**: Bot's permanent store (SQLite-based)
+- **Namespace**: Each user gets their own namespace in the store
+- **Key Format**: `{sender}:{counter_name}`
 
-- Each counter has a unique key in the format `counter:{user_id}:{counter_name}`
-- Counter values are stored as simple strings
-- The cache has an automatic expiry time (default is 12 hours)
-- Each user has their own set of counters, isolated from other users
+## Development
 
-The plugin uses `plugin.GetCache` and `plugin.SetCache` functions from the `github.com/rubiojr/sup/pkg/plugin` package to interact with the cache.
+The plugin demonstrates how to use the sup bot's store functionality:
 
-## Contributing
+```go
+// Get a value from the store
+data, err := plugin.Storage().Get(key)
 
-Feel free to contribute to this plugin by opening issues or pull requests on the [sup GitHub repository](https://github.com/rubiojr/sup).
+// Set a value in the store
+err := plugin.Storage().Set(key, []byte(value))
+```
+
+The store provides permanent storage without expiration, making it ideal for data that should persist across bot restarts.

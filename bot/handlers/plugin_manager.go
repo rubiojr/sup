@@ -8,6 +8,7 @@ import (
 
 	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/internal/log"
+	"github.com/rubiojr/sup/store"
 )
 
 type PluginManager interface {
@@ -23,24 +24,26 @@ type pluginManager struct {
 	pluginDir string
 	plugins   map[string]*WasmHandler
 	cache     cache.Cache
+	store     store.Store
 }
 
-func NewPluginManager(pluginDir string, c cache.Cache) PluginManager {
+func NewPluginManager(pluginDir string, c cache.Cache, s store.Store) PluginManager {
 	return &pluginManager{
 		pluginDir: pluginDir,
 		plugins:   make(map[string]*WasmHandler),
 		cache:     c,
+		store:     s,
 	}
 }
 
-func DefaultPluginManager(cache cache.Cache) PluginManager {
+func DefaultPluginManager(cache cache.Cache, store store.Store) PluginManager {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		panic("could not get default user home")
 	}
 
 	pluginDir := filepath.Join(homeDir, ".local", "share", "sup", "plugins")
-	return NewPluginManager(pluginDir, cache)
+	return NewPluginManager(pluginDir, cache, store)
 }
 
 func (pm *pluginManager) LoadPlugins() error {
@@ -77,7 +80,7 @@ func (pm *pluginManager) loadPlugin(pluginPath string) error {
 	if ext := filepath.Ext(pluginName); ext != "" {
 		pluginName = pluginName[:len(pluginName)-len(ext)]
 	}
-	handler, err := NewWasmHandler(pluginPath, pm.cache.Namespace(pluginName))
+	handler, err := NewWasmHandler(pluginPath, pm.cache.Namespace(pluginName), pm.store.Namespace(pluginName))
 	if err != nil {
 		return fmt.Errorf("failed to create WASM handler: %w", err)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/internal/botfs"
 	"github.com/rubiojr/sup/internal/client"
+	"github.com/rubiojr/sup/store"
 )
 
 const DefaultTrigger = ".sup"
@@ -29,6 +30,7 @@ type Bot struct {
 	logger        *slog.Logger
 	trigger       string
 	cache         cache.Cache
+	store         store.Store
 }
 
 // Option is a function that configures the Bot
@@ -82,6 +84,14 @@ func WithCache(cache cache.Cache) Option {
 	}
 }
 
+// WithStore sets a custom store for the bot.
+// If not provided, the bot will create a default store.
+func WithStore(store store.Store) Option {
+	return func(b *Bot) {
+		b.store = store
+	}
+}
+
 // New creates a new Bot instance with the given options.
 // The bot is initialized with a default logger (slog.Default()) and
 // all handlers are automatically registered.
@@ -99,7 +109,7 @@ func WithCache(cache cache.Cache) Option {
 //	bot := New(WithLogger(logger))
 //
 //	// Create a bot with custom plugin manager
-//	pm := handlers.NewPluginManager("/custom/plugin/path")
+//	pm := handlers.NewPluginManager("/custom/plugin/path", cache, store)
 //	bot := New(WithPluginManager(pm))
 //
 //	// Create a bot with custom registry
@@ -133,7 +143,25 @@ func New(opts ...Option) (*Bot, error) {
 			b.cache = cache
 		}
 	}
-	b.pluginManager = handlers.DefaultPluginManager(b.cache)
+
+	// Initialize default store if none provided
+	storeDir := filepath.Join(botfs.DataDir(), "store")
+	storePath := filepath.Join(storeDir, "store.db")
+	if b.store == nil {
+		err := os.MkdirAll(storeDir, os.ModeDir|0755)
+		if err != nil {
+			return nil, err
+		}
+		store, err := store.NewStore(storePath)
+		if err != nil {
+			b.logger.Warn("Failed to initialize default store", "error", err)
+			return nil, err
+		} else {
+			b.logger.Debug("Store initialized")
+			b.store = store
+		}
+	}
+	b.pluginManager = handlers.DefaultPluginManager(b.cache, b.store)
 
 	if b.pluginManager != nil {
 		// Load WASM plugins
@@ -325,6 +353,14 @@ func (b *Bot) Cache() (cache.Cache, error) {
 		return nil, errors.New("cache service not initialized")
 	}
 	return b.cache, nil
+}
+
+// Store returns the store service
+func (b *Bot) Store() (store.Store, error) {
+	if b.store == nil {
+		return nil, errors.New("store service not initialized")
+	}
+	return b.store, nil
 }
 
 // RegisterDefaultHandlers registers all available bot handlers with the given bot

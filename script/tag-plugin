@@ -59,6 +59,7 @@ fi
 
 echo "Moving plugin from '$WASM_FILE' to '$REGISTRY_DIR/'"
 mv "$WASM_FILE" "$REGISTRY_DIR/"
+cp "$PLUGIN_DIR/metadata.json" "registry/plugins/$PLUGIN_NAME"
 
 echo "Successfully tagged and registered plugin '$PLUGIN_NAME' version '$VERSION'"
 echo "Git tag: $TAG_NAME"
