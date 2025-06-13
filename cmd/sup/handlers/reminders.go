@@ -47,7 +47,7 @@ func NewRemindersHandler(store store.Store) *RemindersHandler {
 		cron:   cron.New(cron.WithSeconds()),
 	}
 
-	handler.cron.AddFunc("* * * * * *", handler.checkAllReminders)
+	handler.cron.AddFunc("*/10 * * * * *", handler.checkAllReminders)
 	handler.cron.Start()
 
 	return handler
@@ -112,7 +112,6 @@ func (h *RemindersHandler) HandleMessage(msg *events.Message) error {
 func (h *RemindersHandler) createReminder(c *client.Client, msg *events.Message, sender, chatID, message string) error {
 	isGroup := msg.Info.Chat.Server == types.GroupServer
 	reminderKey := h.getReminderKey(sender, chatID, isGroup)
-	h.garbageCollect(reminderKey)
 
 	// Split on @ to separate description from time
 	parts := strings.SplitN(message, "@", 2)
@@ -219,7 +218,6 @@ func (h *RemindersHandler) listReminders(c *client.Client, msg *events.Message, 
 
 func (h *RemindersHandler) deleteReminder(c *client.Client, msg *events.Message, sender, chatID string, isGroup bool, reminderID string) error {
 	reminderKey := h.getReminderKey(sender, chatID, isGroup)
-	h.garbageCollect(reminderKey)
 	reminders, err := h.getReminders(reminderKey)
 	if err != nil {
 		c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
@@ -253,7 +251,6 @@ func (h *RemindersHandler) deleteReminder(c *client.Client, msg *events.Message,
 
 func (h *RemindersHandler) clearReminders(c *client.Client, msg *events.Message, sender, chatID string, isGroup bool) error {
 	reminderKey := h.getReminderKey(sender, chatID, isGroup)
-	h.garbageCollect(reminderKey)
 	if err := h.saveReminders(reminderKey, []Reminder{}); err != nil {
 		c.SendText(msg.Info.Chat, "❌ Failed to clear reminders: "+err.Error())
 		return nil
@@ -269,7 +266,6 @@ func (h *RemindersHandler) clearReminders(c *client.Client, msg *events.Message,
 
 func (h *RemindersHandler) checkUserReminders(c *client.Client, msg *events.Message, sender, chatID string, isGroup bool) error {
 	reminderKey := h.getReminderKey(sender, chatID, isGroup)
-	h.garbageCollect(reminderKey)
 	reminders, err := h.getReminders(reminderKey)
 	if err != nil {
 		c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
@@ -315,7 +311,7 @@ func (h *RemindersHandler) checkUserReminders(c *client.Client, msg *events.Mess
 }
 
 func (h *RemindersHandler) checkAllReminders() {
-	log.Debug("Checking all reminders")
+	log.Debug("Checking all reminders and running garbage collection")
 
 	c, err := client.GetClient()
 	if err != nil {
@@ -330,14 +326,14 @@ func (h *RemindersHandler) checkAllReminders() {
 	}
 
 	for _, reminderKey := range reminderKeys {
+		// Run garbage collection for each key
+		h.garbageCollect(reminderKey)
+		// Check and notify for due reminders
 		h.checkAndNotifyUser(c, reminderKey)
 	}
 }
 
 func (h *RemindersHandler) checkAndNotifyUser(c *client.Client, reminderKey string) {
-	// First run garbage collection to clean up old reminders
-	h.garbageCollect(reminderKey)
-
 	reminders, err := h.getReminders(reminderKey)
 	if err != nil {
 		log.Error("Failed to get reminders for key", "reminderKey", reminderKey, "error", err)
@@ -455,17 +451,19 @@ func (h *RemindersHandler) garbageCollect(reminderKey string) {
 	}
 
 	now := time.Now()
+	cutoffTime := now.Add(-10 * time.Second) // Only remove reminders older than 10 seconds
 	var activeReminders []Reminder
 	removedCount := 0
 
 	for _, reminder := range reminders {
-		// Only keep reminders that are in the future (not yet due)
-		// Remove all past reminders regardless of triggered status
-		if reminder.RemindAt.After(now) {
+		// Keep reminders that are either:
+		// 1. In the future (not yet due)
+		// 2. Past but within 10 seconds (recently triggered)
+		if reminder.RemindAt.After(now) || reminder.RemindAt.After(cutoffTime) {
 			activeReminders = append(activeReminders, reminder)
 		} else {
 			removedCount++
-			log.Debug("Garbage collecting past reminder", "reminderKey", reminderKey, "reminderID", reminder.ID, "remindAt", reminder.RemindAt, "triggered", reminder.Triggered)
+			log.Debug("Garbage collecting old reminder", "reminderKey", reminderKey, "reminderID", reminder.ID, "remindAt", reminder.RemindAt, "triggered", reminder.Triggered, "age", now.Sub(reminder.RemindAt))
 		}
 	}
 
@@ -547,7 +545,8 @@ func (h *RemindersHandler) GetHelp() handlers.HandlerHelp {
 		Examples: []string{
 			".sup rem Meeting with John @ tomorrow 3pm",
 			".sup rem Call mom @ in 2 hours",
-			".sup rem Dentist appointment @ next friday",
+			".sup rem Check the oven @ in 30 seconds",
+			".sup rem Test reminder @ in 10 seconds",
 			".sup rem list",
 			".sup rem delete 12345678",
 			".sup rem clear",

@@ -36,9 +36,11 @@ The handler uses the format: `<description> @ <time>`
 
 - `tomorrow 3pm` - Tomorrow at 3:00 PM
 - `in 2 hours` - 2 hours from now
+- `in 30 minutes` - 30 minutes from now
+- `in 10 seconds` - 10 seconds from now
+- `in 1 second` - 1 second from now
 - `next friday` - Next Friday (default time)
 - `monday 9am` - Next Monday at 9:00 AM
-- `in 30 minutes` - 30 minutes from now
 - `december 25 10am` - December 25th at 10:00 AM
 
 ### Complete Examples
@@ -47,6 +49,8 @@ The handler uses the format: `<description> @ <time>`
 - `.sup rem Call mom @ in 2 hours`
 - `.sup rem Dentist appointment @ next friday 10am`
 - `.sup rem Pick up groceries @ in 30 minutes`
+- `.sup rem Check the oven @ in 10 seconds`
+- `.sup rem Test reminder @ in 5 seconds`
 
 ## Usage Examples
 
@@ -58,8 +62,12 @@ The handler uses the format: `<description> @ <time>`
 .sup rem Call mom @ in 2 hours
 # Output: ✅ Reminder set for Monday, January 15, 2024 at 4:30 PM: Call mom
 
+.sup rem Check the oven @ in 30 seconds
+# Output: ✅ Reminder set for Monday, January 15, 2024 at 2:30:30 PM: Check the oven
+
 .sup rem list
-# Output: 📝 Active reminders (2):
+# Output: 📝 Active reminders (3):
+# • Mon Jan 15, 2:30 PM [99887766]: Check the oven
 # • Mon Jan 15, 4:30 PM [12345678]: Call mom
 # • Tue Jan 16, 3:00 PM [87654321]: Meeting with John
 
@@ -118,7 +126,7 @@ When a reminder becomes due, the bot automatically sends a notification **to the
 - **Individual Storage**: `{sender}:reminders` for private chats
 - **Group Storage**: `group:{chat_id}:reminders` for group chats
 - **Index**: Maintains a `reminder_keys_index` to track all active reminder keys
-- **Cleanup**: Automatically removes all past reminders immediately when accessed
+- **Cleanup**: Automatically removes reminders older than 10 seconds every 10 seconds
 
 ## Reminder Structure
 
@@ -141,7 +149,8 @@ Each reminder is stored as a JSON object with the following fields:
 - **Storage**: Bot's permanent store (SQLite-based via rubiojr/kv)
 - **Time Parser**: [github.com/olebedev/when](https://github.com/olebedev/when)
 - **Scheduler**: [github.com/robfig/cron/v3](https://github.com/robfig/cron)
-- **Cron Schedule**: `* * * * * *` (every second)
+- **Cron Schedule**: `*/10 * * * * *` (every 10 seconds for monitoring and cleanup)
+- **Second Precision**: Supports reminders down to 1-second accuracy
 - **Key Format**: `{sender}:reminders`
 
 ## Architecture
@@ -196,16 +205,17 @@ Since the store doesn't support key enumeration, the handler maintains a separat
 - Cron job errors are logged but don't crash the bot
 - Missing or invalid chat IDs are logged and safely skipped
 - Chat ID validation prevents reminders from being created without proper delivery context
-- Aggressive cleanup removes all past reminders to keep lists current
+- Smart cleanup removes reminders older than 10 seconds while preserving recent ones
 
 ## Limitations
 
 - Time parsing is in English only
 - No timezone support (uses system timezone)
-- Background checking runs every second (may be overkill)
+- Background checking runs every 10 seconds (balances performance with responsiveness)
 - User enumeration requires maintaining a separate index
 - No recurring reminder support
-- Past reminders are immediately removed (no history preservation)
+- Past reminders are kept for 10 seconds then removed (brief history for user confirmation)
+- Very short reminders (under 1 second) are not supported
 
 ## Development Notes
 

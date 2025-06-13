@@ -193,6 +193,9 @@ func TestRemindersHandler_TimeFormatParsing(t *testing.T) {
 		{"tomorrow 3pm", true},
 		{"next friday", true},
 		{"in 30 minutes", true},
+		{"in 10 seconds", true},
+		{"in 30 seconds", true},
+		{"in 1 second", true},
 		{"december 25 10am", true},
 		{"invalid time format", false},
 		{"", false},
@@ -274,21 +277,21 @@ func TestRemindersHandler_GarbageCollection(t *testing.T) {
 	reminderKey := "test@example.com"
 	now := time.Now()
 
-	// Create test reminders: one old triggered, one future, one recent triggered
+	// Create test reminders: one old, one future, one recent within cutoff
 	reminders := []Reminder{
 		{
 			ID:        "old-triggered",
-			RemindAt:  now.Add(-25 * time.Hour), // 25 hours ago
+			RemindAt:  now.Add(-25 * time.Hour), // 25 hours ago - should be removed
 			Triggered: true,
 		},
 		{
 			ID:        "future",
-			RemindAt:  now.Add(1 * time.Hour), // 1 hour from now
+			RemindAt:  now.Add(1 * time.Hour), // 1 hour from now - should be kept
 			Triggered: false,
 		},
 		{
 			ID:        "recent-triggered",
-			RemindAt:  now.Add(-1 * time.Hour), // 1 hour ago
+			RemindAt:  now.Add(-5 * time.Second), // 5 seconds ago - should be kept
 			Triggered: true,
 		},
 	}
@@ -308,22 +311,25 @@ func TestRemindersHandler_GarbageCollection(t *testing.T) {
 		t.Errorf("Failed to get reminders after garbage collection: %v", err)
 	}
 
-	// Should have 1 reminder (only future - all past reminders removed)
-	if len(remaining) != 1 {
-		t.Errorf("Expected 1 reminder after garbage collection, got %d", len(remaining))
+	// Should have 2 reminders (future and recent-triggered within cutoff)
+	if len(remaining) != 2 {
+		t.Errorf("Expected 2 reminders after garbage collection, got %d", len(remaining))
 	}
 
-	// Verify all past reminders were removed
+	// Verify correct reminders remain
+	remainingIDs := make(map[string]bool)
 	for _, reminder := range remaining {
-		if reminder.ID == "old-triggered" {
-			t.Errorf("Old triggered reminder should have been garbage collected")
-		}
-		if reminder.ID == "recent-triggered" {
-			t.Errorf("Recent triggered reminder should have been garbage collected")
-		}
-		if reminder.ID != "future" {
-			t.Errorf("Only future reminder should remain, got %s", reminder.ID)
-		}
+		remainingIDs[reminder.ID] = true
+	}
+
+	if remainingIDs["old-triggered"] {
+		t.Errorf("Old triggered reminder should have been garbage collected")
+	}
+	if !remainingIDs["future"] {
+		t.Errorf("Future reminder should not have been garbage collected")
+	}
+	if !remainingIDs["recent-triggered"] {
+		t.Errorf("Recent triggered reminder should not have been garbage collected")
 	}
 }
 
@@ -756,18 +762,18 @@ func TestRemindersHandler_OldReminderGarbageCollection(t *testing.T) {
 	// Create test reminders with different states
 	reminders := []Reminder{
 		{
-			ID:        "old-untriggered",
-			RemindAt:  now.Add(-25 * time.Hour), // Old and untriggered - should be removed
+			ID:        "very-old",
+			RemindAt:  now.Add(-25 * time.Hour), // Very old - should be removed
 			Triggered: false,
 		},
 		{
-			ID:        "old-triggered",
-			RemindAt:  now.Add(-25 * time.Hour), // Old but triggered - should be removed
+			ID:        "old-beyond-cutoff",
+			RemindAt:  now.Add(-30 * time.Second), // 30 seconds old - should be removed
 			Triggered: true,
 		},
 		{
-			ID:        "recent-triggered",
-			RemindAt:  now.Add(-1 * time.Hour), // Recent and triggered - should be removed (all past reminders)
+			ID:        "recent-within-cutoff",
+			RemindAt:  now.Add(-5 * time.Second), // 5 seconds old - should be kept
 			Triggered: true,
 		},
 		{
@@ -792,9 +798,9 @@ func TestRemindersHandler_OldReminderGarbageCollection(t *testing.T) {
 		t.Errorf("Failed to get reminders after garbage collection: %v", err)
 	}
 
-	// Should have 1 reminder (only future-untriggered)
-	if len(remaining) != 1 {
-		t.Errorf("Expected 1 reminder after garbage collection, got %d", len(remaining))
+	// Should have 2 reminders (recent-within-cutoff and future-untriggered)
+	if len(remaining) != 2 {
+		t.Errorf("Expected 2 reminders after garbage collection, got %d", len(remaining))
 		for _, r := range remaining {
 			t.Logf("Remaining reminder: ID=%s, RemindAt=%s, Triggered=%v", r.ID, r.RemindAt.Format("2006-01-02 15:04:05"), r.Triggered)
 		}
@@ -806,24 +812,24 @@ func TestRemindersHandler_OldReminderGarbageCollection(t *testing.T) {
 		remainingIDs[reminder.ID] = true
 	}
 
-	// All past reminders should be removed
-	if remainingIDs["old-untriggered"] {
-		t.Errorf("Old untriggered reminder should have been garbage collected")
+	// Old reminders should be removed
+	if remainingIDs["very-old"] {
+		t.Errorf("Very old reminder should have been garbage collected")
 	}
-	if remainingIDs["old-triggered"] {
-		t.Errorf("Old triggered reminder should have been garbage collected")
-	}
-	if remainingIDs["recent-triggered"] {
-		t.Errorf("Recent triggered reminder should have been garbage collected (all past reminders removed)")
+	if remainingIDs["old-beyond-cutoff"] {
+		t.Errorf("Old reminder beyond cutoff should have been garbage collected")
 	}
 
-	// Only future reminders should remain
+	// Recent and future reminders should remain
+	if !remainingIDs["recent-within-cutoff"] {
+		t.Errorf("Recent reminder within cutoff should not have been garbage collected")
+	}
 	if !remainingIDs["future-untriggered"] {
 		t.Errorf("Future untriggered reminder should not have been garbage collected")
 	}
 }
 
-func TestRemindersHandler_ListFiltersOutPastReminders(t *testing.T) {
+func TestRemindersHandler_ListFiltersOutOldReminders(t *testing.T) {
 	store := newMockStore()
 	handler := &RemindersHandler{
 		store: store,
@@ -838,19 +844,25 @@ func TestRemindersHandler_ListFiltersOutPastReminders(t *testing.T) {
 	reminderKey := "test@example.com"
 	now := time.Now()
 
-	// Create mix of past and future reminders
+	// Create mix of old past, recent past, and future reminders
 	reminders := []Reminder{
 		{
-			ID:          "past-1",
+			ID:          "old-past-1",
 			Description: "Old meeting",
-			RemindAt:    now.Add(-2 * time.Hour), // 2 hours ago
+			RemindAt:    now.Add(-2 * time.Hour), // 2 hours ago - should be removed
 			Triggered:   false,
 		},
 		{
-			ID:          "past-2",
+			ID:          "old-past-2",
 			Description: "Another old task",
-			RemindAt:    now.Add(-1 * time.Hour), // 1 hour ago
+			RemindAt:    now.Add(-30 * time.Second), // 30 seconds ago - should be removed
 			Triggered:   false,
+		},
+		{
+			ID:          "recent-past",
+			Description: "Recent task",
+			RemindAt:    now.Add(-5 * time.Second), // 5 seconds ago - should be kept
+			Triggered:   true,
 		},
 		{
 			ID:          "future-1",
@@ -879,34 +891,202 @@ func TestRemindersHandler_ListFiltersOutPastReminders(t *testing.T) {
 		t.Errorf("Failed to get reminders: %v", err)
 	}
 
-	// Should only have future reminders (2)
-	if len(remaining) != 2 {
-		t.Errorf("Expected 2 future reminders, got %d", len(remaining))
+	// Should have 3 reminders (recent-past within cutoff + 2 future)
+	if len(remaining) != 3 {
+		t.Errorf("Expected 3 reminders after cleanup, got %d", len(remaining))
 		for _, r := range remaining {
 			t.Logf("Found reminder: ID=%s, RemindAt=%s, Triggered=%v", r.ID, r.RemindAt.Format("2006-01-02 15:04:05"), r.Triggered)
 		}
 	}
 
-	// Verify only future reminders remain
+	// Verify old past reminders are removed
+	remainingIDs := make(map[string]bool)
 	for _, reminder := range remaining {
-		if !reminder.RemindAt.After(now) {
-			t.Errorf("Past reminder %s should have been filtered out", reminder.ID)
-		}
-		if reminder.ID == "past-1" || reminder.ID == "past-2" {
-			t.Errorf("Past reminder %s should not be in the list", reminder.ID)
-		}
+		remainingIDs[reminder.ID] = true
 	}
 
-	// Verify future reminders are present
-	futureIDs := make(map[string]bool)
-	for _, reminder := range remaining {
-		futureIDs[reminder.ID] = true
+	if remainingIDs["old-past-1"] {
+		t.Errorf("Old past reminder 'old-past-1' should have been removed")
+	}
+	if remainingIDs["old-past-2"] {
+		t.Errorf("Old past reminder 'old-past-2' should have been removed")
 	}
 
-	if !futureIDs["future-1"] {
+	// Verify recent and future reminders are present
+	if !remainingIDs["recent-past"] {
+		t.Errorf("Recent past reminder 'recent-past' should be in the list")
+	}
+	if !remainingIDs["future-1"] {
 		t.Errorf("Future reminder 'future-1' should be in the list")
 	}
-	if !futureIDs["future-2"] {
+	if !remainingIDs["future-2"] {
 		t.Errorf("Future reminder 'future-2' should be in the list")
+	}
+}
+
+func TestRemindersHandler_SecondPrecisionReminders(t *testing.T) {
+	store := newMockStore()
+	handler := &RemindersHandler{
+		store: store,
+	}
+
+	// Initialize the when parser
+	w := when.New(nil)
+	w.Add(en.All...)
+	w.Add(common.All...)
+	handler.parser = w
+
+	sender := "test@example.com"
+	chatID := "test@s.whatsapp.net"
+	now := time.Now()
+
+	// Test second-precision parsing
+	testCases := []struct {
+		timeStr  string
+		expected time.Duration
+	}{
+		{"in 5 seconds", 5 * time.Second},
+		{"in 10 seconds", 10 * time.Second},
+		{"in 30 seconds", 30 * time.Second},
+		{"in 1 second", 1 * time.Second},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.timeStr, func(t *testing.T) {
+			// Parse the time
+			result, err := handler.parser.Parse(tc.timeStr, now)
+			if err != nil || result == nil {
+				t.Errorf("Failed to parse '%s': %v", tc.timeStr, err)
+				return
+			}
+
+			// Check if the parsed time is approximately correct (within 1 second tolerance)
+			expectedTime := now.Add(tc.expected)
+			diff := result.Time.Sub(expectedTime)
+			if diff < -time.Second || diff > time.Second {
+				t.Errorf("Time parsing for '%s' inaccurate: expected ~%s, got %s (diff: %s)",
+					tc.timeStr, expectedTime.Format("15:04:05"), result.Time.Format("15:04:05"), diff)
+			}
+
+			// Test creating a reminder with second precision
+			reminder := Reminder{
+				ID:          fmt.Sprintf("test-%d", time.Now().UnixNano()),
+				Description: fmt.Sprintf("Test reminder for %s", tc.timeStr),
+				RemindAt:    result.Time,
+				CreatedAt:   now,
+				Triggered:   false,
+				ChatID:      chatID,
+			}
+
+			err = handler.saveReminder(sender, reminder)
+			if err != nil {
+				t.Errorf("Failed to save second-precision reminder: %v", err)
+				return
+			}
+
+			// Verify the reminder was saved with correct precision
+			reminders, err := handler.getReminders(sender)
+			if err != nil {
+				t.Errorf("Failed to get reminders: %v", err)
+				return
+			}
+
+			found := false
+			for _, saved := range reminders {
+				if saved.ID == reminder.ID {
+					found = true
+					// Check if the time was preserved with second precision
+					if !saved.RemindAt.Equal(reminder.RemindAt) {
+						t.Errorf("Reminder time precision lost: expected %s, got %s",
+							reminder.RemindAt.Format("15:04:05.000"), saved.RemindAt.Format("15:04:05.000"))
+					}
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("Second-precision reminder not found after saving")
+			}
+
+			// Clean up for next test
+			handler.saveReminders(sender, []Reminder{})
+		})
+	}
+}
+
+func TestRemindersHandler_SecondPrecisionTriggering(t *testing.T) {
+	store := newMockStore()
+	handler := &RemindersHandler{
+		store: store,
+	}
+
+	// Initialize the when parser
+	w := when.New(nil)
+	w.Add(en.All...)
+	w.Add(common.All...)
+	handler.parser = w
+
+	reminderKey := "test@example.com"
+	chatID := "test@s.whatsapp.net"
+	now := time.Now()
+
+	// Create a reminder that should trigger in 2 seconds
+	reminderTime := now.Add(2 * time.Second)
+	reminder := Reminder{
+		ID:          "second-test",
+		Description: "Should trigger in 2 seconds",
+		RemindAt:    reminderTime,
+		CreatedAt:   now,
+		Triggered:   false,
+		ChatID:      chatID,
+	}
+
+	// Save the reminder
+	err := handler.saveReminder(reminderKey, reminder)
+	if err != nil {
+		t.Errorf("Failed to save reminder: %v", err)
+	}
+
+	// Test that reminder is not yet due
+	currentTime := now.Add(1 * time.Second)
+	reminders, err := handler.getReminders(reminderKey)
+	if err != nil {
+		t.Errorf("Failed to get reminders: %v", err)
+	}
+
+	var dueReminders []Reminder
+	for _, r := range reminders {
+		if !r.Triggered && r.RemindAt.Before(currentTime) {
+			dueReminders = append(dueReminders, r)
+		}
+	}
+
+	if len(dueReminders) != 0 {
+		t.Errorf("Reminder should not be due yet at +1 second, but found %d due reminders", len(dueReminders))
+	}
+
+	// Test that reminder is due after the trigger time
+	currentTime = now.Add(3 * time.Second)
+	dueReminders = nil
+	for _, r := range reminders {
+		if !r.Triggered && r.RemindAt.Before(currentTime) {
+			dueReminders = append(dueReminders, r)
+		}
+	}
+
+	if len(dueReminders) != 1 {
+		t.Errorf("Expected 1 due reminder at +3 seconds, but found %d", len(dueReminders))
+	}
+
+	if len(dueReminders) > 0 && dueReminders[0].ID != "second-test" {
+		t.Errorf("Wrong reminder triggered: expected 'second-test', got '%s'", dueReminders[0].ID)
+	}
+
+	// Verify the timing precision
+	if len(dueReminders) > 0 {
+		actualTriggerDelay := currentTime.Sub(dueReminders[0].RemindAt)
+		if actualTriggerDelay < 0 || actualTriggerDelay > 2*time.Second {
+			t.Errorf("Timing precision issue: reminder should trigger within 2 seconds of due time, but delay was %s", actualTriggerDelay)
+		}
 	}
 }
