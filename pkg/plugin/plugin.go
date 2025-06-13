@@ -233,6 +233,12 @@ func hostGetCache(keyPtr uint64) uint64
 //go:wasmimport extism:host/user set_cache
 func hostSetCache(dataPtr uint64) uint32
 
+//go:wasmimport extism:host/user get_store
+func hostGetStore(keyPtr uint64) uint64
+
+//go:wasmimport extism:host/user set_store
+func hostSetStore(dataPtr uint64) uint32
+
 // ReadFile reads a file from the host and returns its contents as bytes
 func ReadFile(path string) ([]byte, error) {
 	// Allocate memory for the path string
@@ -366,6 +372,59 @@ func SetCache(key string, value []byte) error {
 	result := hostSetCache(dataMem.Offset())
 	if result != 0 {
 		return fmt.Errorf("failed to set cache value, error code: %d", result)
+	}
+
+	return nil
+}
+
+// GetStore retrieves a value from the store by key
+func GetStore(key string) ([]byte, error) {
+	// Allocate memory for the key string
+	keyMem := pdk.AllocateString(key)
+
+	// Call the host function
+	resultMem := hostGetStore(keyMem.Offset())
+
+	// Read the result
+	data := pdk.FindMemory(resultMem)
+	if data.Length() == 0 {
+		return nil, fmt.Errorf("failed to get store value for key %s", key)
+	}
+
+	// Parse the JSON response
+	var response cacheResponse
+	err := json.Unmarshal(data.ReadBytes(), &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse store response: %w", err)
+	}
+
+	if !response.Success {
+		return nil, fmt.Errorf("store get failed: %s", response.Error)
+	}
+
+	return []byte(response.Data), nil
+}
+
+// SetStore stores a value in the store with the given key
+func SetStore(key string, value []byte) error {
+	// Create the request data
+	request := map[string]interface{}{
+		"key":   key,
+		"value": string(value),
+	}
+
+	requestData, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal store request: %w", err)
+	}
+
+	// Allocate memory for the request data
+	dataMem := pdk.AllocateBytes(requestData)
+
+	// Call the host function
+	result := hostSetStore(dataMem.Offset())
+	if result != 0 {
+		return fmt.Errorf("failed to set store value, error code: %d", result)
 	}
 
 	return nil

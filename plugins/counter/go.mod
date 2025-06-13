@@ -1,4 +1,4 @@
-module ruleta
+module counter
 
 go 1.24.3
 
