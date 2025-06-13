@@ -184,10 +184,21 @@ err := plugin.SendImage("recipient@s.whatsapp.net", "/path/to/image.jpg")
 // List directory contents
 files, err := plugin.ListDirectory("/path/to/directory")
 
-// Key value cache (1h expiration)
+// Key value cache (1h expiration) - for temporary data
 err := plugin.SetCache("key", []byte("some value"))
 value, err := plugin.GetCache("key")
+
+// Persistent storage (no expiration) - for permanent data
+err := plugin.Storage().Set("key", []byte("some value"))
+value, err := plugin.Storage().Get("key")
 ```
+
+#### Storage vs Cache
+
+- **Cache**: Use for temporary data that can expire (1 hour TTL). Good for caching API responses, temporary user state, etc.
+- **Storage**: Use for permanent data that should persist across bot restarts. Good for user settings, counters, persistent state, etc.
+
+Both cache and storage are automatically namespaced per plugin, so different plugins cannot interfere with each other's data.
 
 > [!NOTE]
 > Plugins only have access to files in their plugin dir. Each WASM plugin has its own data directory under `$HOME/.local/share/sup/plugin-data/<plugin-name>`.
