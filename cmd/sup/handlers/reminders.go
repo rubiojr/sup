@@ -29,6 +29,7 @@ type Reminder struct {
 	Triggered   bool      `json:"triggered"`
 	ChatID      string    `json:"chat_id"`
 	CreatedBy   string    `json:"created_by"`
+	GroupName   string    `json:"group_name,omitempty"`
 }
 
 type RemindersHandler struct {
@@ -145,6 +146,11 @@ func (h *RemindersHandler) createReminder(c *client.Client, msg *events.Message,
 		return nil
 	}
 
+	var groupName string
+	if isGroup {
+		groupName = h.getGroupName(c, msg.Info.Chat)
+	}
+
 	reminder := Reminder{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		Description: description,
@@ -153,6 +159,7 @@ func (h *RemindersHandler) createReminder(c *client.Client, msg *events.Message,
 		Triggered:   false,
 		ChatID:      chatID,
 		CreatedBy:   sender,
+		GroupName:   groupName,
 	}
 
 	log.Debug("Creating reminder", "user", sender, "chatID", chatID, "description", description, "remindAt", result.Time)
@@ -242,14 +249,14 @@ func (h *RemindersHandler) listReminders(c *client.Client, msg *events.Message, 
 		if reminder.Description != "" {
 			if isOwnChat {
 				// Show chat context for user's own chat listing all reminders
-				chatInfo := h.getChatInfo(reminder.ChatID)
+				chatInfo := h.getChatInfo(reminder.ChatID, reminder.GroupName)
 				result.WriteString(fmt.Sprintf("• %s [%s]: %s %s\n", timeStr, reminder.ID[:8], reminder.Description, chatInfo))
 			} else {
 				result.WriteString(fmt.Sprintf("• %s [%s]: %s\n", timeStr, reminder.ID[:8], reminder.Description))
 			}
 		} else {
 			if isOwnChat {
-				chatInfo := h.getChatInfo(reminder.ChatID)
+				chatInfo := h.getChatInfo(reminder.ChatID, reminder.GroupName)
 				result.WriteString(fmt.Sprintf("• %s [%s] %s\n", timeStr, reminder.ID[:8], chatInfo))
 			} else {
 				result.WriteString(fmt.Sprintf("• %s [%s]\n", timeStr, reminder.ID[:8]))
@@ -633,11 +640,31 @@ func (h *RemindersHandler) extractPhoneNumber(jid string) string {
 	return jid
 }
 
-func (h *RemindersHandler) getChatInfo(chatID string) string {
+func (h *RemindersHandler) getChatInfo(chatID string, groupName string) string {
 	if strings.Contains(chatID, "@g.us") {
+		if groupName != "" {
+			return fmt.Sprintf("(group: %s)", groupName)
+		}
 		return "(group)"
 	}
 	return "(private)"
+}
+
+func (h *RemindersHandler) getGroupName(c *client.Client, chatJID types.JID) string {
+	joinedGroups, err := c.GetJoinedGroups()
+	if err != nil {
+		log.Debug("Failed to get joined groups", "chatJID", chatJID, "error", err)
+		return ""
+	}
+
+	for _, group := range joinedGroups {
+		if group.JID.String() == chatJID.String() {
+			return group.Name
+		}
+	}
+
+	log.Debug("Group not found in joined groups", "chatJID", chatJID)
+	return ""
 }
 
 func (h *RemindersHandler) GetHelp() handlers.HandlerHelp {
