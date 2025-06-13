@@ -28,6 +28,7 @@ type Reminder struct {
 	CreatedAt   time.Time `json:"created_at"`
 	Triggered   bool      `json:"triggered"`
 	ChatID      string    `json:"chat_id"`
+	CreatedBy   string    `json:"created_by"`
 }
 
 type RemindersHandler struct {
@@ -151,6 +152,7 @@ func (h *RemindersHandler) createReminder(c *client.Client, msg *events.Message,
 		CreatedAt:   time.Now(),
 		Triggered:   false,
 		ChatID:      chatID,
+		CreatedBy:   sender,
 	}
 
 	log.Debug("Creating reminder", "user", sender, "chatID", chatID, "description", description, "remindAt", result.Time)
@@ -174,18 +176,48 @@ func (h *RemindersHandler) createReminder(c *client.Client, msg *events.Message,
 }
 
 func (h *RemindersHandler) listReminders(c *client.Client, msg *events.Message, sender, chatID string, isGroup bool) error {
-	reminderKey := h.getReminderKey(sender, chatID, isGroup)
-	h.garbageCollect(reminderKey)
+	// Extract phone number from sender (remove device ID part)
+	senderPhone := h.extractPhoneNumber(sender)
+	chatPhone := h.extractPhoneNumber(chatID)
+	isOwnChat := senderPhone == chatPhone && !isGroup
 
-	reminders, err := h.getReminders(reminderKey)
-	if err != nil {
-		c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
-		return nil
+	log.Debug("listReminders called", "sender", sender, "chatID", chatID, "isGroup", isGroup, "senderPhone", senderPhone, "chatPhone", chatPhone, "isOwnChat", isOwnChat)
+
+	var reminders []Reminder
+	var err error
+
+	if isGroup {
+		reminderKey := h.getReminderKey(sender, chatID, isGroup)
+		reminders, err = h.getReminders(reminderKey)
+		if err != nil {
+			c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
+			return nil
+		}
+	} else {
+		// For non-group (private) chats, check if sender and chatID match
+		if isOwnChat {
+			// User's own chat - list all reminders from all chats for this user
+			reminders, err = h.getAllUserReminders(sender)
+			if err != nil {
+				c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
+				return nil
+			}
+		} else {
+			// Different chat - list only reminders for this specific chat
+			reminderKey := h.getReminderKey(sender, chatID, isGroup)
+			reminders, err = h.getReminders(reminderKey)
+			if err != nil {
+				c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
+				return nil
+			}
+		}
 	}
 
 	if len(reminders) == 0 {
 		if isGroup {
 			c.SendText(msg.Info.Chat, "📝 No active reminders for this group")
+		} else if isOwnChat {
+			c.SendText(msg.Info.Chat, "📝 No active reminders across all chats")
 		} else {
 			c.SendText(msg.Info.Chat, "📝 No active reminders")
 		}
@@ -199,6 +231,8 @@ func (h *RemindersHandler) listReminders(c *client.Client, msg *events.Message, 
 	var result strings.Builder
 	if isGroup {
 		result.WriteString(fmt.Sprintf("📝 Group reminders (%d):\n", len(reminders)))
+	} else if isOwnChat {
+		result.WriteString(fmt.Sprintf("📝 All your reminders (%d):\n", len(reminders)))
 	} else {
 		result.WriteString(fmt.Sprintf("📝 Active reminders (%d):\n", len(reminders)))
 	}
@@ -206,9 +240,20 @@ func (h *RemindersHandler) listReminders(c *client.Client, msg *events.Message, 
 	for _, reminder := range reminders {
 		timeStr := reminder.RemindAt.Format("Mon Jan 2, 3:04 PM")
 		if reminder.Description != "" {
-			result.WriteString(fmt.Sprintf("• %s [%s]: %s\n", timeStr, reminder.ID[:8], reminder.Description))
+			if isOwnChat {
+				// Show chat context for user's own chat listing all reminders
+				chatInfo := h.getChatInfo(reminder.ChatID)
+				result.WriteString(fmt.Sprintf("• %s [%s]: %s %s\n", timeStr, reminder.ID[:8], reminder.Description, chatInfo))
+			} else {
+				result.WriteString(fmt.Sprintf("• %s [%s]: %s\n", timeStr, reminder.ID[:8], reminder.Description))
+			}
 		} else {
-			result.WriteString(fmt.Sprintf("• %s [%s]\n", timeStr, reminder.ID[:8]))
+			if isOwnChat {
+				chatInfo := h.getChatInfo(reminder.ChatID)
+				result.WriteString(fmt.Sprintf("• %s [%s] %s\n", timeStr, reminder.ID[:8], chatInfo))
+			} else {
+				result.WriteString(fmt.Sprintf("• %s [%s]\n", timeStr, reminder.ID[:8]))
+			}
 		}
 	}
 
@@ -535,6 +580,64 @@ func (h *RemindersHandler) removeKeyFromIndex(reminderKey string) error {
 	}
 
 	return h.store.Put([]byte("reminder_keys_index"), data)
+}
+
+func (h *RemindersHandler) getAllUserReminders(userID string) ([]Reminder, error) {
+	log.Debug("Getting all user reminders", "userID", userID)
+
+	allKeys, err := h.getAllReminderKeys()
+	if err != nil {
+		log.Error("Failed to get all reminder keys", "error", err)
+		return nil, err
+	}
+
+	log.Debug("Found reminder keys", "keys", allKeys, "count", len(allKeys))
+
+	var allReminders []Reminder
+
+	for _, key := range allKeys {
+		log.Debug("Processing key", "key", key, "userID", userID)
+
+		h.garbageCollect(key)
+		reminders, err := h.getReminders(key)
+		if err != nil {
+			log.Error("Failed to get reminders for key", "key", key, "error", err)
+			continue
+		}
+
+		log.Debug("Found reminders for key", "key", key, "count", len(reminders))
+
+		// Filter reminders created by this user
+		for _, reminder := range reminders {
+			if reminder.CreatedBy == userID {
+				allReminders = append(allReminders, reminder)
+				log.Debug("Added user reminder", "key", key, "reminderID", reminder.ID[:8])
+			}
+		}
+	}
+
+	log.Debug("Total reminders collected", "count", len(allReminders))
+	return allReminders, nil
+}
+
+func (h *RemindersHandler) extractPhoneNumber(jid string) string {
+	// Extract phone number from JID, handling device ID
+	// Format: phone:device@server or phone@server
+	if strings.Contains(jid, "@") {
+		userPart := strings.Split(jid, "@")[0]
+		if strings.Contains(userPart, ":") {
+			return strings.Split(userPart, ":")[0]
+		}
+		return userPart
+	}
+	return jid
+}
+
+func (h *RemindersHandler) getChatInfo(chatID string) string {
+	if strings.Contains(chatID, "@g.us") {
+		return "(group)"
+	}
+	return "(private)"
 }
 
 func (h *RemindersHandler) GetHelp() handlers.HandlerHelp {
