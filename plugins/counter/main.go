@@ -107,7 +107,7 @@ func (p *CounterPlugin) listCounters(sender string) plugin.Output {
 }
 
 func (p *CounterPlugin) getCurrentCount(storeKey string) (int, error) {
-	data, err := plugin.GetStore(storeKey)
+	data, err := plugin.Storage().Get(storeKey)
 	if err != nil {
 		return 0, err
 	}
@@ -125,7 +125,7 @@ func (p *CounterPlugin) getCurrentCount(storeKey string) (int, error) {
 
 func (p *CounterPlugin) storeCount(storeKey string, count int) error {
 	countStr := strconv.Itoa(count)
-	return plugin.SetStore(storeKey, []byte(countStr))
+	return plugin.Storage().Set(storeKey, []byte(countStr))
 }
 
 func (p *CounterPlugin) GetHelp() plugin.HelpOutput {

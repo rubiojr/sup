@@ -377,8 +377,17 @@ func SetCache(key string, value []byte) error {
 	return nil
 }
 
-// GetStore retrieves a value from the store by key
-func GetStore(key string) ([]byte, error) {
+// Storage interface for plugin storage operations
+type Store interface {
+	Get(key string) ([]byte, error)
+	Set(key string, value []byte) error
+}
+
+// storageImpl implements the Storage interface
+type storageImpl struct{}
+
+// Get retrieves a value from the store by key
+func (s *storageImpl) Get(key string) ([]byte, error) {
 	// Allocate memory for the key string
 	keyMem := pdk.AllocateString(key)
 
@@ -405,8 +414,8 @@ func GetStore(key string) ([]byte, error) {
 	return []byte(response.Data), nil
 }
 
-// SetStore stores a value in the store with the given key
-func SetStore(key string, value []byte) error {
+// Set stores a value in the store with the given key
+func (s *storageImpl) Set(key string, value []byte) error {
 	// Create the request data
 	request := map[string]interface{}{
 		"key":   key,
@@ -428,4 +437,19 @@ func SetStore(key string, value []byte) error {
 	}
 
 	return nil
+}
+
+// Storage returns a Storage interface for plugin storage operations
+func Storage() Store {
+	return &storageImpl{}
+}
+
+// GetStore retrieves a value from the store by key (deprecated, use Storage().Get() instead)
+func GetStore(key string) ([]byte, error) {
+	return Storage().Get(key)
+}
+
+// SetStore stores a value in the store with the given key (deprecated, use Storage().Set() instead)
+func SetStore(key string, value []byte) error {
+	return Storage().Set(key, value)
 }

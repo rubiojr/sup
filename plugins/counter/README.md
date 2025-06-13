@@ -92,10 +92,10 @@ The plugin demonstrates how to use the sup bot's store functionality:
 
 ```go
 // Get a value from the store
-data, err := plugin.GetStore(key)
+data, err := plugin.Storage().Get(key)
 
 // Set a value in the store
-err := plugin.SetStore(key, []byte(value))
+err := plugin.Storage().Set(key, []byte(value))
 ```
 
 The store provides permanent storage without expiration, making it ideal for data that should persist across bot restarts.
