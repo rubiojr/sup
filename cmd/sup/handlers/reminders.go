@@ -219,6 +219,7 @@ func (h *RemindersHandler) listReminders(c *client.Client, msg *events.Message, 
 
 func (h *RemindersHandler) deleteReminder(c *client.Client, msg *events.Message, sender, chatID string, isGroup bool, reminderID string) error {
 	reminderKey := h.getReminderKey(sender, chatID, isGroup)
+	h.garbageCollect(reminderKey)
 	reminders, err := h.getReminders(reminderKey)
 	if err != nil {
 		c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
@@ -252,6 +253,7 @@ func (h *RemindersHandler) deleteReminder(c *client.Client, msg *events.Message,
 
 func (h *RemindersHandler) clearReminders(c *client.Client, msg *events.Message, sender, chatID string, isGroup bool) error {
 	reminderKey := h.getReminderKey(sender, chatID, isGroup)
+	h.garbageCollect(reminderKey)
 	if err := h.saveReminders(reminderKey, []Reminder{}); err != nil {
 		c.SendText(msg.Info.Chat, "❌ Failed to clear reminders: "+err.Error())
 		return nil
@@ -267,6 +269,7 @@ func (h *RemindersHandler) clearReminders(c *client.Client, msg *events.Message,
 
 func (h *RemindersHandler) checkUserReminders(c *client.Client, msg *events.Message, sender, chatID string, isGroup bool) error {
 	reminderKey := h.getReminderKey(sender, chatID, isGroup)
+	h.garbageCollect(reminderKey)
 	reminders, err := h.getReminders(reminderKey)
 	if err != nil {
 		c.SendText(msg.Info.Chat, "❌ Failed to get reminders: "+err.Error())
