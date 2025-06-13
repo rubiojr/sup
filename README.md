@@ -9,7 +9,7 @@ WhatsApp CLI and Bot framework.
 ### WhatsApp command line interface
 
 - List all WhatsApp groups and contacts
-- Send files, images and clipboard to individual users or groups
+- Send files, images, audio and clipboard contents to individual users or groups
 - QR code authentication for WhatsApp Web
 - A sample but useful bot extensible via plugins (https://sup-registry.rbel.co)
 
