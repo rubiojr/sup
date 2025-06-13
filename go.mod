@@ -6,6 +6,8 @@ require (
 	github.com/extism/go-sdk v1.7.1
 	github.com/gabriel-vasile/mimetype v1.4.9
 	github.com/ncruces/go-sqlite3 v0.26.0
+	github.com/olebedev/when v1.1.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/rubiojr/aemet-go v0.3.0
 	github.com/rubiojr/kv v0.3.4
 	github.com/tetratelabs/wazero v1.9.0
@@ -14,6 +16,7 @@ require (
 )
 
 require (
+	github.com/AlekSi/pointer v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240819160327-2d926c5d788a // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
@@ -21,6 +24,7 @@ require (
 	github.com/ianlancetaylor/demangle v0.0.0-20240805132620-81f5be970eca // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
