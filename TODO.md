@@ -9,3 +9,4 @@
 - Being able to send messages by contact/group name
 - A public plugin registry/repository
 - Better tooling to download and install plugins
+- Log host function for plugins
