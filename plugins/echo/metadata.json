@@ -1,0 +1,9 @@
+{
+  "name": "echo",
+  "description": "Echo demo plugin",
+  "author": "rubiojr",
+  "home_url": "https://github.com/rubiojr/sup",
+  "category": "util",
+  "tags": []
+}
+
