@@ -23,7 +23,6 @@ All commands start with `.sup rem`:
 - `.sup rem delete <id>` - Delete a specific reminder (use first 8 chars of ID)
 - `.sup rem clear` - Clear all reminders
 - `.sup rem check` - Manually check for due reminders
-- `.sup rem debug` - Show chat information for debugging
 
 ## Format
 
@@ -216,7 +215,6 @@ The handler demonstrates several advanced patterns:
 4. **Natural Language Processing**: Parsing human-readable time expressions
 5. **Cross-Chat Communication**: Sending reminders to the original chat context
 6. **Chat Context Preservation**: Storing and validating chat IDs to ensure delivery to the correct location
-7. **Debug Support**: Built-in debugging commands to troubleshoot chat delivery issues
 
 ### Chat ID Handling
 

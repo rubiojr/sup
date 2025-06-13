@@ -54,7 +54,7 @@ func NewRemindersHandler(store store.Store) *RemindersHandler {
 }
 
 func (h *RemindersHandler) Name() string {
-	return "reminders"
+	return "rem"
 }
 
 func (h *RemindersHandler) Topics() []string {
@@ -104,8 +104,6 @@ func (h *RemindersHandler) HandleMessage(msg *events.Message) error {
 		return h.clearReminders(c, msg, sender, chatID, isGroup)
 	case "check":
 		return h.checkUserReminders(c, msg, sender, chatID, isGroup)
-	case "debug":
-		return h.debugChatInfo(c, msg, sender, chatID)
 	default:
 		return h.createReminder(c, msg, sender, chatID, text)
 	}
@@ -528,13 +526,6 @@ func (h *RemindersHandler) removeKeyFromIndex(reminderKey string) error {
 	return h.store.Put([]byte("reminder_keys_index"), data)
 }
 
-func (h *RemindersHandler) debugChatInfo(c *client.Client, msg *events.Message, sender, chatID string) error {
-	debugInfo := fmt.Sprintf("🔍 Debug Info:\nSender: %s\nChat ID: %s\nIs Group: %v",
-		sender, chatID, msg.Info.Chat.Server == types.GroupServer)
-	c.SendText(msg.Info.Chat, debugInfo)
-	return nil
-}
-
 func (h *RemindersHandler) GetHelp() handlers.HandlerHelp {
 	return handlers.HandlerHelp{
 		Name:        "reminders",
@@ -547,7 +538,6 @@ func (h *RemindersHandler) GetHelp() handlers.HandlerHelp {
 			".sup rem list",
 			".sup rem delete 12345678",
 			".sup rem clear",
-			".sup rem debug",
 		},
 		Category: "utility",
 	}
