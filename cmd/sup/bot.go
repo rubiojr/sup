@@ -7,6 +7,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/rubiojr/sup/bot"
+	bothandlers "github.com/rubiojr/sup/bot/handlers"
 	"github.com/rubiojr/sup/cmd/sup/handlers"
 	"github.com/rubiojr/sup/internal/botfs"
 	"github.com/rubiojr/sup/internal/log"
@@ -84,6 +85,11 @@ func registerHandlers(b *bot.Bot) error {
 	fd := botfs.HandlerDataDir("file-downloader")
 	fileDownloader := handlers.NewFileDownloaderHandler(fd)
 	if err := b.RegisterHandler(fileDownloader); err != nil {
+		return err
+	}
+
+	whatsAppLocationHandler := bothandlers.NewWhatsAppLocationHandler()
+	if err := b.RegisterHandler(whatsAppLocationHandler); err != nil {
 		return err
 	}
 
