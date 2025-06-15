@@ -2,6 +2,8 @@
 
 The WhatsApp Location handler automatically captures location messages sent to WhatsApp and stores them in AnyType with coordinates, accuracy, and metadata.
 
+![WhatsApp Location Handler](/images/anytype-whatsapp.png)
+
 ## Overview
 
 This handler monitors all incoming WhatsApp messages for location data. When a location message is received, it automatically extracts the coordinates, accuracy information, and sender details, then stores this data in an AnyType workspace.
