@@ -3,6 +3,7 @@ module github.com/rubiojr/sup
 go 1.24.3
 
 require (
+	github.com/epheo/anytype-go v0.3.3
 	github.com/extism/go-sdk v1.7.1
 	github.com/gabriel-vasile/mimetype v1.4.9
 	github.com/ncruces/go-sqlite3 v0.26.0
@@ -14,6 +15,8 @@ require (
 	go.mau.fi/whatsmeow v0.0.0-20250611144432-af1a723d11ee
 	google.golang.org/protobuf v1.36.6
 )
+
+replace github.com/epheo/anytype-go => github.com/rubiojr/anytype-go v0.3.4-0.20250615181828-fe44eaab274d
 
 require (
 	github.com/AlekSi/pointer v1.0.0 // indirect
