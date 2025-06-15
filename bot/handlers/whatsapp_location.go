@@ -16,13 +16,13 @@ import (
 )
 
 // WhatsAppLocationHandler automatically captures WhatsApp location messages
-// and stores them in AnyType with coordinates, accuracy, and metadata.
+// and stores them in Anytype with coordinates, accuracy, and metadata.
 //
 // Environment Variables Required:
-//   - ANYTYPE_API_KEY: The AnyType AppKey for authentication
-//   - ANYTYPE_SPACE: The AnyType Space ID where locations will be stored
+//   - ANYTYPE_API_KEY: The Anytype AppKey for authentication
+//   - ANYTYPE_SPACE: The Anytype Space ID where locations will be stored
 //
-// The handler automatically creates a "WhatsAppLocation" type in AnyType
+// The handler automatically creates a "WhatsAppLocation" type in Anytype
 // if it doesn't exist, with fields for latitude, longitude, accuracy,
 // sender, chat ID, and timestamp.
 type WhatsAppLocationHandler struct {
@@ -38,8 +38,8 @@ func NewWhatsAppLocationHandler() *WhatsAppLocationHandler {
 }
 
 func (h *WhatsAppLocationHandler) HandleMessage(msg *events.Message) error {
-	if !h.isAnyTypeAvailable() {
-		log.Debug("AnyType environment variables not available, ignoring")
+	if !h.isAnytypeAvailable() {
+		log.Debug("Anytype environment variables not available, ignoring")
 		return nil
 	}
 
@@ -56,8 +56,8 @@ func (h *WhatsAppLocationHandler) HandleMessage(msg *events.Message) error {
 		"accuracy", loc.AccuracyInMeters)
 
 	if h.client == nil {
-		if err := h.initializeAnyType(); err != nil {
-			return fmt.Errorf("failed to initialize AnyType client: %w", err)
+		if err := h.initializeAnytype(); err != nil {
+			return fmt.Errorf("failed to initialize Anytype client: %w", err)
 		}
 	}
 
@@ -80,7 +80,7 @@ func (h *WhatsAppLocationHandler) HandleMessage(msg *events.Message) error {
 	return nil
 }
 
-func (*WhatsAppLocationHandler) isAnyTypeAvailable() bool {
+func (*WhatsAppLocationHandler) isAnytypeAvailable() bool {
 	if os.Getenv("ANYTYPE_API_KEY") == "" {
 		return false
 	}
@@ -92,7 +92,7 @@ func (*WhatsAppLocationHandler) isAnyTypeAvailable() bool {
 	return true
 }
 
-func (h *WhatsAppLocationHandler) initializeAnyType() error {
+func (h *WhatsAppLocationHandler) initializeAnytype() error {
 	apiKey := os.Getenv("ANYTYPE_API_KEY")
 	if apiKey == "" {
 		return fmt.Errorf("ANYTYPE_API_KEY environment variable is required")
@@ -226,7 +226,7 @@ func (h *WhatsAppLocationHandler) Topics() []string {
 func (h *WhatsAppLocationHandler) GetHelp() HandlerHelp {
 	return HandlerHelp{
 		Name:        "WhatsApp Location",
-		Description: "Automatically stores WhatsApp location messages in AnyType",
+		Description: "Automatically stores WhatsApp location messages in Anytype",
 		Usage:       "Send a location message to WhatsApp",
 		Examples:    []string{"Share your location in any chat"},
 		Category:    "storage",
