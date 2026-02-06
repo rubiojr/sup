@@ -4,6 +4,9 @@
 
 WhatsApp CLI and Bot framework.
 
+> [!WARNING]
+> This is highly experimental, badly documented, and handles very sensitive (you whatshaps and auth tokens) data. Use at your own risk.
+
 ## Features
 
 ### WhatsApp command line interface
