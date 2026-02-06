@@ -120,6 +120,50 @@ func hostGetStore(keyPtr uint64) uint64
 //go:wasmimport extism:host/user set_store
 func hostSetStore(dataPtr uint64) uint32
 
+//go:wasmimport extism:host/user exec_command
+func hostExecCommand(dataPtr uint64) uint64
+
+// ExecCommandRequest is the request payload for ExecCommand.
+type ExecCommandRequest struct {
+	Command string `json:"command"`
+	Stdin   string `json:"stdin,omitempty"`
+}
+
+// ExecCommandResponse is the response from ExecCommand.
+type ExecCommandResponse struct {
+	Success  bool   `json:"success"`
+	Stdout   string `json:"stdout,omitempty"`
+	Stderr   string `json:"stderr,omitempty"`
+	ExitCode int    `json:"exit_code"`
+	Error    string `json:"error,omitempty"`
+}
+
+// ExecCommand executes a whitelisted command on the host with optional stdin.
+func ExecCommand(command, stdin string) (*ExecCommandResponse, error) {
+	request := ExecCommandRequest{
+		Command: command,
+		Stdin:   stdin,
+	}
+
+	dataMem, err := pdk.AllocateJSON(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal exec request: %w", err)
+	}
+
+	resultMem := hostExecCommand(dataMem.Offset())
+	data := pdk.FindMemory(resultMem)
+	if data.Length() == 0 {
+		return nil, fmt.Errorf("exec_command returned empty response")
+	}
+
+	var resp ExecCommandResponse
+	if err := json.Unmarshal(data.ReadBytes(), &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse exec response: %w", err)
+	}
+
+	return &resp, nil
+}
+
 // ReadFile reads a file from the host and returns its contents as bytes
 func ReadFile(path string) ([]byte, error) {
 	pathMem := pdk.AllocateString(path)

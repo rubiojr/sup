@@ -31,8 +31,9 @@ type Bot struct {
 	trigger       string
 	cache         cache.Cache
 	store         store.Store
-	allowedGroups map[string]struct{}
-	allowedUsers  map[string]struct{}
+	allowedGroups   map[string]struct{}
+	allowedUsers    map[string]struct{}
+	allowedCommands []string
 }
 
 // Option is a function that configures the Bot
@@ -118,6 +119,13 @@ func WithAllowedUsers(users []string) Option {
 	}
 }
 
+// WithAllowedCommands sets the commands that WASM plugins are allowed to execute.
+func WithAllowedCommands(commands []string) Option {
+	return func(b *Bot) {
+		b.allowedCommands = commands
+	}
+}
+
 // New creates a new Bot instance with the given options.
 // The bot is initialized with a default logger (slog.Default()) and
 // all handlers are automatically registered.
@@ -187,7 +195,7 @@ func New(opts ...Option) (*Bot, error) {
 			b.store = store
 		}
 	}
-	b.pluginManager = handlers.DefaultPluginManager(b.cache, b.store)
+	b.pluginManager = handlers.DefaultPluginManager(b.cache, b.store, b.allowedCommands)
 
 	if b.pluginManager != nil {
 		// Load WASM plugins

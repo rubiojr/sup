@@ -37,6 +37,21 @@ func (m *mockStore) Put(key []byte, value []byte) error {
 	return nil
 }
 
+func (m *mockStore) Delete(key []byte) error {
+	delete(m.data, string(key))
+	return nil
+}
+
+func (m *mockStore) List(prefix string) ([]string, error) {
+	var keys []string
+	for k := range m.data {
+		if len(prefix) == 0 || len(k) >= len(prefix) && k[:len(prefix)] == prefix {
+			keys = append(keys, k)
+		}
+	}
+	return keys, nil
+}
+
 func (m *mockStore) Namespace(name string) store.Store {
 	return &mockStore{
 		data: m.data, // Share the same data for simplicity

@@ -12,9 +12,26 @@ import (
 
 // Config represents the bot configuration.
 type Config struct {
-	Trigger  string `toml:"trigger"`
-	LogLevel string `toml:"log_level"`
-	Allow    Allow  `toml:"allow"`
+	Trigger  string          `toml:"trigger"`
+	LogLevel string          `toml:"log_level"`
+	Allow    Allow           `toml:"allow"`
+	Agendalo AgendaloConfig  `toml:"agendalo"`
+	Plugins  PluginsConfig   `toml:"plugins"`
+}
+
+// AgendaloConfig holds settings for the agendalo handler.
+type AgendaloConfig struct {
+	// Command is the external command (with optional args) that reads text
+	// from stdin and returns JSON events.
+	Command      string `toml:"command"`
+	// RateLimit is the max number of add interactions per sender per hour.
+	RateLimit    int    `toml:"rate_limit"`
+}
+
+// PluginsConfig holds settings for the WASM plugin system.
+type PluginsConfig struct {
+	// AllowedCommands is a whitelist of commands that WASM plugins can execute.
+	AllowedCommands []string `toml:"allowed_commands"`
 }
 
 // AllowEntry represents an allowed JID with an optional display name.

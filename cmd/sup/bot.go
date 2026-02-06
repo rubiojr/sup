@@ -108,6 +108,7 @@ func botRunCommand(ctx context.Context, cmd *cli.Command) error {
 		bot.WithTrigger(t),
 		bot.WithAllowedGroups(cfg.Allow.GroupJIDs()),
 		bot.WithAllowedUsers(cfg.Allow.UserJIDs()),
+		bot.WithAllowedCommands(cfg.Plugins.AllowedCommands),
 	)
 	if err != nil {
 		return err
@@ -118,14 +119,14 @@ func botRunCommand(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	if err := registerHandlers(botInstance); err != nil {
+	if err := registerHandlers(botInstance, cfg); err != nil {
 		return err
 	}
 
 	return botInstance.Start(ctx)
 }
 
-func registerHandlers(b *bot.Bot) error {
+func registerHandlers(b *bot.Bot, cfg *config.Config) error {
 	cache, err := b.Cache()
 	if err != nil {
 		return err

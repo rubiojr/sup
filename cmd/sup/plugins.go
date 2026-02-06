@@ -31,6 +31,7 @@ var pluginsCmd = &cli.Command{
 			ArgsUsage: "<plugin-name>",
 			Action:    pluginRemoveAction,
 		},
+		pluginStoreCmd,
 	},
 }
 

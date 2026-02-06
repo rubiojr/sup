@@ -21,29 +21,31 @@ type PluginManager interface {
 }
 
 type pluginManager struct {
-	pluginDir string
-	plugins   map[string]*WasmHandler
-	cache     cache.Cache
-	store     store.Store
+	pluginDir       string
+	plugins         map[string]*WasmHandler
+	cache           cache.Cache
+	store           store.Store
+	allowedCommands []string
 }
 
-func NewPluginManager(pluginDir string, c cache.Cache, s store.Store) PluginManager {
+func NewPluginManager(pluginDir string, c cache.Cache, s store.Store, allowedCommands []string) PluginManager {
 	return &pluginManager{
-		pluginDir: pluginDir,
-		plugins:   make(map[string]*WasmHandler),
-		cache:     c,
-		store:     s,
+		pluginDir:       pluginDir,
+		plugins:         make(map[string]*WasmHandler),
+		cache:           c,
+		store:           s,
+		allowedCommands: allowedCommands,
 	}
 }
 
-func DefaultPluginManager(cache cache.Cache, store store.Store) PluginManager {
+func DefaultPluginManager(cache cache.Cache, store store.Store, allowedCommands []string) PluginManager {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		panic("could not get default user home")
 	}
 
 	pluginDir := filepath.Join(homeDir, ".local", "share", "sup", "plugins")
-	return NewPluginManager(pluginDir, cache, store)
+	return NewPluginManager(pluginDir, cache, store, allowedCommands)
 }
 
 func (pm *pluginManager) LoadPlugins() error {
@@ -80,7 +82,7 @@ func (pm *pluginManager) loadPlugin(pluginPath string) error {
 	if ext := filepath.Ext(pluginName); ext != "" {
 		pluginName = pluginName[:len(pluginName)-len(ext)]
 	}
-	handler, err := NewWasmHandler(pluginPath, pm.cache.Namespace(pluginName), pm.store.Namespace(pluginName))
+	handler, err := NewWasmHandler(pluginPath, pm.cache.Namespace(pluginName), pm.store.Namespace(pluginName), pm.allowedCommands)
 	if err != nil {
 		return fmt.Errorf("failed to create WASM handler: %w", err)
 	}

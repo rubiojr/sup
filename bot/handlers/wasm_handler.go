@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	extism "github.com/extism/go-sdk"
 	"github.com/rubiojr/sup/cache"
@@ -70,7 +73,22 @@ type ListDirResponse struct {
 	Error   string   `json:"error,omitempty"`
 }
 
-func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store) (*WasmHandler, error) {
+// ExecCommandRequest is the JSON structure for exec_command requests from plugins.
+type ExecCommandRequest struct {
+	Command string `json:"command"`
+	Stdin   string `json:"stdin,omitempty"`
+}
+
+// ExecCommandResponse is the JSON structure returned to plugins from exec_command.
+type ExecCommandResponse struct {
+	Success  bool   `json:"success"`
+	Stdout   string `json:"stdout,omitempty"`
+	Stderr   string `json:"stderr,omitempty"`
+	ExitCode int    `json:"exit_code"`
+	Error    string `json:"error,omitempty"`
+}
+
+func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allowedCommands []string) (*WasmHandler, error) {
 	ctx := context.Background()
 
 	// Calculate the plugin data directory
@@ -240,6 +258,18 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store) (*Was
 			},
 			[]extism.ValueType{extism.ValueTypeI64},
 			[]extism.ValueType{extism.ValueTypeI32},
+		),
+		extism.NewHostFunctionWithStack(
+			"exec_command",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				// For temp plugin, return error
+				resp := ExecCommandResponse{Success: false, Error: "exec_command not available in temp plugin"}
+				respData, _ := json.Marshal(resp)
+				offset, _ := p.WriteString(string(respData))
+				stack[0] = offset
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI64},
 		),
 	}
 
@@ -653,12 +683,56 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store) (*Was
 			[]extism.ValueType{extism.ValueTypeI64},
 			[]extism.ValueType{extism.ValueTypeI32},
 		),
+		extism.NewHostFunctionWithStack(
+			"exec_command",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				dataOffset := extism.DecodeU32(stack[0])
+				requestData, err := p.ReadBytes(uint64(dataOffset))
+				if err != nil {
+					resp := ExecCommandResponse{Success: false, Error: "failed to read request"}
+					respData, _ := json.Marshal(resp)
+					offset, _ := p.WriteString(string(respData))
+					stack[0] = offset
+					return
+				}
+
+				var req ExecCommandRequest
+				if err := json.Unmarshal(requestData, &req); err != nil {
+					resp := ExecCommandResponse{Success: false, Error: "invalid request JSON"}
+					respData, _ := json.Marshal(resp)
+					offset, _ := p.WriteString(string(respData))
+					stack[0] = offset
+					return
+				}
+
+				resp := executeWhitelistedCommand(req, allowedCommands)
+				respData, _ := json.Marshal(resp)
+				offset, _ := p.WriteString(string(respData))
+				stack[0] = offset
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI64},
+		),
 	}
 
 	plugin, err := extism.NewPlugin(ctx, manifest, config, hostFunctions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create WASM plugin from %s: %w", wasmPath, err)
 	}
+
+	extism.SetLogLevel(extism.LogLevelInfo)
+	plugin.SetLogger(func(level extism.LogLevel, msg string) {
+		switch level {
+		case extism.LogLevelError:
+			log.Error(msg, "plugin", filepath.Base(wasmPath))
+		case extism.LogLevelWarn:
+			log.Warn(msg, "plugin", filepath.Base(wasmPath))
+		case extism.LogLevelInfo:
+			log.Info(msg, "plugin", filepath.Base(wasmPath))
+		default:
+			log.Debug(msg, "plugin", filepath.Base(wasmPath))
+		}
+	})
 
 	name := filepath.Base(wasmPath)
 	if ext := filepath.Ext(name); ext != "" {
@@ -856,6 +930,64 @@ func getRequiredEnvVars(plugin *extism.Plugin) ([]string, error) {
 	}
 
 	return envVars, nil
+}
+
+// executeWhitelistedCommand runs a command only if it's in the allowed list.
+func executeWhitelistedCommand(req ExecCommandRequest, allowedCommands []string) ExecCommandResponse {
+	cmdParts := strings.Fields(req.Command)
+	if len(cmdParts) == 0 {
+		return ExecCommandResponse{Success: false, Error: "empty command"}
+	}
+
+	cmdName := cmdParts[0]
+	allowed := false
+	for _, ac := range allowedCommands {
+		if ac == cmdName {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		log.Warn("Plugin exec_command blocked - command not whitelisted", "command", cmdName)
+		return ExecCommandResponse{Success: false, Error: fmt.Sprintf("command %q not in allowed list", cmdName)}
+	}
+
+	cmd := exec.Command(cmdParts[0], cmdParts[1:]...)
+	if req.Stdin != "" {
+		cmd.Stdin = strings.NewReader(req.Stdin)
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd = exec.CommandContext(ctx, cmdParts[0], cmdParts[1:]...)
+	cmd.Stdin = strings.NewReader(req.Stdin)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		exitCode := 1
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+		return ExecCommandResponse{
+			Success:  false,
+			Stdout:   stdout.String(),
+			Stderr:   stderr.String(),
+			ExitCode: exitCode,
+			Error:    err.Error(),
+		}
+	}
+
+	return ExecCommandResponse{
+		Success:  true,
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+		ExitCode: 0,
+	}
 }
 
 // sanitizePluginPath ensures the requested path is within the plugin's data directory
