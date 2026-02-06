@@ -88,10 +88,10 @@ const (
 
 // allowListItem represents a group or user for the TUI
 type allowListItem struct {
-	JID        string
-	Name       string
-	Phone      string // users only
-	IsAllowed  bool
+	JID         string
+	Name        string
+	Phone       string // users only
+	IsAllowed   bool
 	MemberCount int // groups only
 }
 

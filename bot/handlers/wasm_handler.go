@@ -1,15 +1,12 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	extism "github.com/extism/go-sdk"
 	"github.com/rubiojr/sup/cache"
@@ -33,6 +30,7 @@ type WasmHandler struct {
 	name    string
 	help    HandlerHelp
 	dataDir string
+	root    *os.Root
 }
 
 type WasmInput struct {
@@ -98,214 +96,25 @@ type StoreListResponse struct {
 func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allowedCommands []string) (*WasmHandler, error) {
 	ctx := context.Background()
 
-	// Calculate the plugin data directory
 	pluginDir := filepath.Dir(wasmPath)
-	pluginName := filepath.Base(wasmPath)
-	if ext := filepath.Ext(pluginName); ext != "" {
-		pluginName = pluginName[:len(pluginName)-len(ext)]
-	}
+	pluginName := stripExt(filepath.Base(wasmPath))
 	dataDir := filepath.Join(pluginDir, "../plugin-data", pluginName)
 
-	// First create a temporary plugin to query required environment variables
-	tempManifest := extism.Manifest{
-		Wasm: []extism.Wasm{
-			extism.WasmFile{
-				Path: wasmPath,
-			},
-		},
-		AllowedHosts: []string{"*"},
-		AllowedPaths: map[string]string{},
-	}
-
-	tempConfig := extism.PluginConfig{
-		EnableWasi: true,
-	}
-
-	// Create minimal host functions for temporary plugin
-	tempHostFunctions := []extism.HostFunction{
-		extism.NewHostFunctionWithStack(
-			"read_file",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the path string from memory
-				pathOffset := extism.DecodeU32(stack[0])
-				requestedPath, err := p.ReadString(uint64(pathOffset))
-				if err != nil {
-					offset, _ := p.WriteString("")
-					stack[0] = offset
-					return
-				}
-
-				// Sanitize and resolve the path relative to plugin data directory
-				safePath := sanitizePluginPath(requestedPath, dataDir)
-				if safePath == "" {
-					log.Warn("Plugin file read blocked - path outside allowed directory", "requested_path", requestedPath, "data_dir", dataDir)
-					// Path is outside allowed directory - return empty string
-					offset, _ := p.WriteString("")
-					stack[0] = offset
-					return
-				}
-
-				log.Debug("Plugin reading file", "path", safePath, "requested_path", requestedPath)
-
-				// For temp plugin, just return empty string (don't actually read files)
-				offset, _ := p.WriteString("")
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"send_image",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the request data from memory
-				dataOffset := extism.DecodeU32(stack[0])
-				requestData, err := p.ReadBytes(uint64(dataOffset))
-				if err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				var req SendImageRequest
-				if err := json.Unmarshal(requestData, &req); err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				// Sanitize and resolve the image path relative to plugin data directory
-				safePath := sanitizePluginPath(req.ImagePath, dataDir)
-				if safePath == "" {
-					log.Warn("Plugin image send blocked - path outside allowed directory", "requested_path", req.ImagePath, "data_dir", dataDir, "recipient", req.Recipient)
-					// Path is outside allowed directory
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				log.Info("Plugin sending image", "path", safePath, "requested_path", req.ImagePath, "recipient", req.Recipient)
-
-				// For temp plugin, just return success without actually sending
-				stack[0] = extism.EncodeU32(0) // success
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI32},
-		),
-		extism.NewHostFunctionWithStack(
-			"list_directory",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the path string from memory
-				pathOffset := extism.DecodeU32(stack[0])
-				requestedPath, err := p.ReadString(uint64(pathOffset))
-				if err != nil {
-					resp := ListDirResponse{Success: false, Error: "Failed to read path"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				// Sanitize and resolve the path relative to plugin data directory
-				safePath := sanitizePluginPath(requestedPath, dataDir)
-				if safePath == "" {
-					log.Warn("Plugin directory listing blocked - path outside allowed directory", "requested_path", requestedPath, "data_dir", dataDir)
-					resp := ListDirResponse{Success: false, Error: "Path outside allowed directory"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				log.Debug("Plugin listing directory", "path", safePath, "requested_path", requestedPath)
-
-				// For temp plugin, return empty list
-				resp := ListDirResponse{Success: true, Files: []string{}}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"get_cache",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// For temp plugin, return empty cache response
-				resp := CacheResponse{Success: false, Error: "Cache not available in temp plugin"}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"set_cache",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// For temp plugin, just return success without actually setting
-				stack[0] = extism.EncodeU32(0) // success
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI32},
-		),
-		extism.NewHostFunctionWithStack(
-			"get_store",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// For temp plugin, return empty store response
-				resp := CacheResponse{Success: false, Error: "Store not available in temp plugin"}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"set_store",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// For temp plugin, just return success without actually setting
-				stack[0] = extism.EncodeU32(0) // success
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI32},
-		),
-		extism.NewHostFunctionWithStack(
-			"exec_command",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				resp := ExecCommandResponse{Success: false, Error: "exec_command not available in temp plugin"}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"list_store",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				resp := StoreListResponse{Success: false, Error: "list_store not available in temp plugin"}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-	}
-
-	tempPlugin, err := extism.NewPlugin(ctx, tempManifest, tempConfig, tempHostFunctions)
+	// Temporary plugin (noop) to query required environment variables
+	noopHC := &hostContext{dataDir: dataDir, noop: true}
+	tempPlugin, err := newExtismPlugin(ctx, wasmPath, noopHC.hostFunctions(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary WASM plugin from %s: %w", wasmPath, err)
 	}
 
-	// Query the plugin for required environment variables
 	requiredEnvVars, err := getRequiredEnvVars(tempPlugin)
 	if err != nil {
 		tempPlugin.Close(ctx)
 		return nil, fmt.Errorf("failed to get required env vars from %s: %w", wasmPath, err)
 	}
-
-	// Close the temporary plugin
 	tempPlugin.Close(ctx)
 
-	// Create the final module config with only the required environment variables
+	// Build module config with only the required environment variables
 	moduleConfig := wazero.NewModuleConfig()
 	for _, name := range requiredEnvVars {
 		if value := os.Getenv(name); value != "" {
@@ -313,12 +122,50 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allow
 		}
 	}
 
-	// Create the final plugin with the proper environment variables
+	// Ensure plugin data directory exists
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		return nil, fmt.Errorf("failed to create plugin data directory %s: %w", dataDir, err)
+	}
+
+	// Open a sandboxed root for filesystem operations
+	root, err := os.OpenRoot(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open plugin data root %s: %w", dataDir, err)
+	}
+
+	// Real plugin with actual host function implementations
+	hc := &hostContext{
+		dataDir:         dataDir,
+		root:            root,
+		cache:           cache,
+		store:           store,
+		allowedCommands: allowedCommands,
+	}
+	plugin, err := newExtismPlugin(ctx, wasmPath, hc.hostFunctions(), moduleConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create WASM plugin from %s: %w", wasmPath, err)
+	}
+
+	setupPluginLogger(plugin, wasmPath)
+
+	handler := &WasmHandler{
+		plugin:  plugin,
+		name:    pluginName,
+		dataDir: dataDir,
+		root:    root,
+	}
+
+	if err := handler.loadHelp(); err != nil {
+		return nil, fmt.Errorf("failed to load help for WASM plugin %s: %w", wasmPath, err)
+	}
+
+	return handler, nil
+}
+
+func newExtismPlugin(ctx context.Context, wasmPath string, hostFunctions []extism.HostFunction, moduleConfig wazero.ModuleConfig) (*extism.Plugin, error) {
 	manifest := extism.Manifest{
 		Wasm: []extism.Wasm{
-			extism.WasmFile{
-				Path: wasmPath,
-			},
+			extism.WasmFile{Path: wasmPath},
 		},
 		AllowedHosts: []string{"*"},
 		AllowedPaths: map[string]string{},
@@ -329,452 +176,10 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allow
 		ModuleConfig: moduleConfig,
 	}
 
-	hostFunctions := []extism.HostFunction{
-		extism.NewHostFunctionWithStack(
-			"read_file",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the path string from memory
-				pathOffset := extism.DecodeU32(stack[0])
-				requestedPath, err := p.ReadString(uint64(pathOffset))
-				if err != nil {
-					offset, _ := p.WriteString("")
-					stack[0] = offset
-					return
-				}
+	return extism.NewPlugin(ctx, manifest, config, hostFunctions)
+}
 
-				// Sanitize and resolve the path relative to plugin data directory
-				safePath := sanitizePluginPath(requestedPath, dataDir)
-				if safePath == "" {
-					log.Warn("Plugin file read blocked - path outside allowed directory", "requested_path", requestedPath, "data_dir", dataDir)
-					// Path is outside allowed directory
-					offset, _ := p.WriteString("")
-					stack[0] = offset
-					return
-				}
-
-				log.Debug("Plugin reading file", "path", safePath, "requested_path", requestedPath)
-
-				// Read the file
-				data, err := os.ReadFile(safePath)
-				if err != nil {
-					// Return empty string on error
-					offset, _ := p.WriteString("")
-					stack[0] = offset
-					return
-				}
-
-				// Write the file contents to memory and return offset
-				offset, err := p.WriteString(string(data))
-				if err != nil {
-					offset, _ := p.WriteString("")
-					stack[0] = offset
-					return
-				}
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"send_image",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the request data from memory
-				dataOffset := extism.DecodeU32(stack[0])
-				requestData, err := p.ReadBytes(uint64(dataOffset))
-				if err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				var req SendImageRequest
-				if err := json.Unmarshal(requestData, &req); err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				// Sanitize and resolve the image path relative to plugin data directory
-				safePath := sanitizePluginPath(req.ImagePath, dataDir)
-				if safePath == "" {
-					log.Warn("Plugin image send blocked - path outside allowed directory", "requested_path", req.ImagePath, "data_dir", dataDir, "recipient", req.Recipient)
-					// Path is outside allowed directory
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				log.Info("Plugin sending image", "path", safePath, "requested_path", req.ImagePath, "recipient", req.Recipient)
-
-				// Get the client and send the image
-				c, err := client.GetClient()
-				if err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				// Parse the recipient JID
-				recipientJID, err := types.ParseJID(req.Recipient)
-				if err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				// Send the image using the sanitized path
-				err = c.SendImage(recipientJID, safePath)
-				if err != nil {
-					log.Error("Plugin image send failed", "path", safePath, "recipient", req.Recipient, "error", err)
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				stack[0] = extism.EncodeU32(0) // success
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI32},
-		),
-		extism.NewHostFunctionWithStack(
-			"list_directory",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the path string from memory
-				pathOffset := extism.DecodeU32(stack[0])
-				requestedPath, err := p.ReadString(uint64(pathOffset))
-				if err != nil {
-					resp := ListDirResponse{Success: false, Error: "Failed to read path"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				// Sanitize and resolve the path relative to plugin data directory
-				safePath := sanitizePluginPath(requestedPath, dataDir)
-				if safePath == "" {
-					log.Warn("Plugin directory listing blocked - path outside allowed directory", "requested_path", requestedPath, "data_dir", dataDir)
-					resp := ListDirResponse{Success: false, Error: "Path outside allowed directory"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				log.Debug("Plugin listing directory", "path", safePath, "requested_path", requestedPath)
-
-				// Check if the path exists and is a directory
-				fileInfo, err := os.Stat(safePath)
-				if err != nil {
-					log.Debug("Plugin directory listing failed - path not found", "path", safePath, "error", err)
-					resp := ListDirResponse{Success: false, Error: fmt.Sprintf("Directory not found: %s", err.Error())}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				if !fileInfo.IsDir() {
-					resp := ListDirResponse{Success: false, Error: "Path is not a directory"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				// Read directory contents
-				entries, err := os.ReadDir(safePath)
-				if err != nil {
-					log.Debug("Plugin directory read failed", "path", safePath, "error", err)
-					resp := ListDirResponse{Success: false, Error: fmt.Sprintf("Failed to read directory: %s", err.Error())}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				// Build list of file names
-				var files []string
-				for _, entry := range entries {
-					files = append(files, entry.Name())
-				}
-
-				// Return successful response with file list
-				resp := ListDirResponse{Success: true, Files: files}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"get_cache",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the key string from memory
-				keyOffset := extism.DecodeU32(stack[0])
-				key, err := p.ReadString(uint64(keyOffset))
-				if err != nil {
-					resp := CacheResponse{Success: false, Error: "Failed to read key"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				log.Debug("Plugin getting cache value", "key", key)
-
-				// Get value from cache
-				var value []byte
-				if cache != nil {
-					value, err = cache.Get([]byte(key))
-					if err != nil {
-						log.Debug("Plugin cache get failed", "key", key, "error", err)
-						resp := CacheResponse{Success: false, Error: err.Error()}
-						respData, _ := json.Marshal(resp)
-						offset, _ := p.WriteString(string(respData))
-						stack[0] = offset
-						return
-					}
-					log.Debug("Plugin cache get success", "key", key, "value", string(value), "raw_bytes", value)
-				} else {
-					resp := CacheResponse{Success: false, Error: "Cache not available"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				// Return successful response with data
-				resp := CacheResponse{Success: true, Data: string(value)}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"set_cache",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the request data from memory
-				dataOffset := extism.DecodeU32(stack[0])
-				requestData, err := p.ReadBytes(uint64(dataOffset))
-				if err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				var req map[string]interface{}
-				if err := json.Unmarshal(requestData, &req); err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				key, ok := req["key"].(string)
-				if !ok {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				// Handle value as string
-				var value []byte
-				if v, ok := req["value"].(string); ok {
-					value = []byte(v)
-				} else {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				log.Debug("Plugin setting cache value", "key", key, "value", string(value), "raw_bytes", value)
-
-				// Set value in cache
-				if cache != nil {
-					err = cache.Put([]byte(key), value)
-					if err != nil {
-						log.Debug("Plugin cache put failed", "key", key, "error", err)
-						stack[0] = extism.EncodeU32(1) // error
-						return
-					}
-					log.Debug("Plugin cache put success", "key", key)
-				} else {
-					stack[0] = extism.EncodeU32(1) // error - cache not available
-					return
-				}
-
-				stack[0] = extism.EncodeU32(0) // success
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI32},
-		),
-		extism.NewHostFunctionWithStack(
-			"get_store",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the key string from memory
-				keyOffset := extism.DecodeU32(stack[0])
-				key, err := p.ReadString(uint64(keyOffset))
-				if err != nil {
-					resp := CacheResponse{Success: false, Error: "Failed to read key"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				log.Debug("Plugin getting store value", "key", key)
-
-				// Get value from store
-				var value []byte
-				if store != nil {
-					value, err = store.Get([]byte(key))
-					if err != nil {
-						log.Debug("Plugin store get failed", "key", key, "error", err)
-						resp := CacheResponse{Success: false, Error: err.Error()}
-						respData, _ := json.Marshal(resp)
-						offset, _ := p.WriteString(string(respData))
-						stack[0] = offset
-						return
-					}
-					log.Debug("Plugin store get success", "key", key, "value", string(value), "raw_bytes", value)
-				} else {
-					resp := CacheResponse{Success: false, Error: "Store not available"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				// Return successful response with data
-				resp := CacheResponse{Success: true, Data: string(value)}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"set_store",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// Get the request data from memory
-				dataOffset := extism.DecodeU32(stack[0])
-				requestData, err := p.ReadBytes(uint64(dataOffset))
-				if err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				var req map[string]interface{}
-				if err := json.Unmarshal(requestData, &req); err != nil {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				key, ok := req["key"].(string)
-				if !ok {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				// Handle value as string
-				var value []byte
-				if v, ok := req["value"].(string); ok {
-					value = []byte(v)
-				} else {
-					stack[0] = extism.EncodeU32(1) // error
-					return
-				}
-
-				log.Debug("Plugin setting store value", "key", key, "value", string(value), "raw_bytes", value)
-
-				// Set value in store
-				if store != nil {
-					err = store.Put([]byte(key), value)
-					if err != nil {
-						log.Debug("Plugin store put failed", "key", key, "error", err)
-						stack[0] = extism.EncodeU32(1) // error
-						return
-					}
-					log.Debug("Plugin store put success", "key", key)
-				} else {
-					stack[0] = extism.EncodeU32(1) // error - store not available
-					return
-				}
-
-				stack[0] = extism.EncodeU32(0) // success
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI32},
-		),
-		extism.NewHostFunctionWithStack(
-			"exec_command",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				dataOffset := extism.DecodeU32(stack[0])
-				requestData, err := p.ReadBytes(uint64(dataOffset))
-				if err != nil {
-					resp := ExecCommandResponse{Success: false, Error: "failed to read request"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				var req ExecCommandRequest
-				if err := json.Unmarshal(requestData, &req); err != nil {
-					resp := ExecCommandResponse{Success: false, Error: "invalid request JSON"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				resp := executeWhitelistedCommand(req, allowedCommands)
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-		extism.NewHostFunctionWithStack(
-			"list_store",
-			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				dataOffset := extism.DecodeU32(stack[0])
-				prefix, err := p.ReadString(uint64(dataOffset))
-				if err != nil {
-					resp := StoreListResponse{Success: false, Error: "failed to read prefix"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				if store == nil {
-					resp := StoreListResponse{Success: false, Error: "Store not available"}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				keys, err := store.List(prefix)
-				if err != nil {
-					resp := StoreListResponse{Success: false, Error: err.Error()}
-					respData, _ := json.Marshal(resp)
-					offset, _ := p.WriteString(string(respData))
-					stack[0] = offset
-					return
-				}
-
-				resp := StoreListResponse{Success: true, Keys: keys}
-				respData, _ := json.Marshal(resp)
-				offset, _ := p.WriteString(string(respData))
-				stack[0] = offset
-			},
-			[]extism.ValueType{extism.ValueTypeI64},
-			[]extism.ValueType{extism.ValueTypeI64},
-		),
-	}
-
-	plugin, err := extism.NewPlugin(ctx, manifest, config, hostFunctions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create WASM plugin from %s: %w", wasmPath, err)
-	}
-
+func setupPluginLogger(plugin *extism.Plugin, wasmPath string) {
 	extism.SetLogLevel(extism.LogLevelInfo)
 	plugin.SetLogger(func(level extism.LogLevel, msg string) {
 		switch level {
@@ -788,23 +193,13 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allow
 			log.Debug(msg, "plugin", filepath.Base(wasmPath))
 		}
 	})
+}
 
-	name := filepath.Base(wasmPath)
+func stripExt(name string) string {
 	if ext := filepath.Ext(name); ext != "" {
-		name = name[:len(name)-len(ext)]
+		return name[:len(name)-len(ext)]
 	}
-
-	handler := &WasmHandler{
-		plugin:  plugin,
-		name:    name,
-		dataDir: dataDir,
-	}
-
-	if err := handler.loadHelp(); err != nil {
-		return nil, fmt.Errorf("failed to load help for WASM plugin %s: %w", wasmPath, err)
-	}
-
-	return handler, nil
+	return name
 }
 
 func (w *WasmHandler) HandleMessage(msg *events.Message) error {
@@ -952,6 +347,9 @@ func (w *WasmHandler) Close() error {
 		ctx := context.Background()
 		w.plugin.Close(ctx)
 	}
+	if w.root != nil {
+		w.root.Close()
+	}
 	return nil
 }
 
@@ -1027,95 +425,4 @@ func getRequiredEnvVars(plugin *extism.Plugin) ([]string, error) {
 	}
 
 	return envVars, nil
-}
-
-// executeWhitelistedCommand runs a command only if it's in the allowed list.
-func executeWhitelistedCommand(req ExecCommandRequest, allowedCommands []string) ExecCommandResponse {
-	cmdParts := strings.Fields(req.Command)
-	if len(cmdParts) == 0 {
-		return ExecCommandResponse{Success: false, Error: "empty command"}
-	}
-
-	cmdName := cmdParts[0]
-	allowed := false
-	for _, ac := range allowedCommands {
-		if ac == cmdName {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
-		log.Warn("Plugin exec_command blocked - command not whitelisted", "command", cmdName)
-		return ExecCommandResponse{Success: false, Error: fmt.Sprintf("command %q not in allowed list", cmdName)}
-	}
-
-	cmd := exec.Command(cmdParts[0], cmdParts[1:]...)
-	if req.Stdin != "" {
-		cmd.Stdin = strings.NewReader(req.Stdin)
-	}
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd = exec.CommandContext(ctx, cmdParts[0], cmdParts[1:]...)
-	cmd.Stdin = strings.NewReader(req.Stdin)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		exitCode := 1
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		}
-		return ExecCommandResponse{
-			Success:  false,
-			Stdout:   stdout.String(),
-			Stderr:   stderr.String(),
-			ExitCode: exitCode,
-			Error:    err.Error(),
-		}
-	}
-
-	return ExecCommandResponse{
-		Success:  true,
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
-		ExitCode: 0,
-	}
-}
-
-// sanitizePluginPath ensures the requested path is within the plugin's data directory
-// and converts absolute paths to be relative to the data directory
-func sanitizePluginPath(requestedPath, dataDir string) string {
-	// Clean the requested path
-	cleanPath := filepath.Clean(requestedPath)
-
-	// If it's an absolute path, treat it as relative to dataDir
-	if filepath.IsAbs(cleanPath) {
-		cleanPath = filepath.Clean(strings.TrimPrefix(cleanPath, "/"))
-	}
-
-	// Join with the data directory
-	fullPath := filepath.Join(dataDir, cleanPath)
-
-	// Ensure the final path is still within the data directory
-	absDataDir, err := filepath.Abs(dataDir)
-	if err != nil {
-		return ""
-	}
-
-	absFullPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return ""
-	}
-
-	// Check if the resolved path is within the data directory
-	if !strings.HasPrefix(absFullPath, absDataDir+string(filepath.Separator)) && absFullPath != absDataDir {
-		return ""
-	}
-
-	return fullPath
 }

@@ -25,12 +25,12 @@ const DefaultTrigger = ".sup"
 
 // Bot represents the WhatsApp bot instance
 type Bot struct {
-	registry      handlers.Registry
-	pluginManager handlers.PluginManager
-	logger        *slog.Logger
-	trigger       string
-	cache         cache.Cache
-	store         store.Store
+	registry        handlers.Registry
+	pluginManager   handlers.PluginManager
+	logger          *slog.Logger
+	trigger         string
+	cache           cache.Cache
+	store           store.Store
 	allowedGroups   map[string]struct{}
 	allowedUsers    map[string]struct{}
 	allowedCommands []string
@@ -274,13 +274,6 @@ func (b *Bot) eventHandler(evt any, handlerPrefix string) {
 	case *events.Message:
 		isGroup := v.Info.Chat.Server == types.GroupServer
 
-		if !b.isAllowed(v.Info.Chat.String(), isGroup) {
-			b.logger.Warn("Message from non-allowed source ignored",
-				"jid", v.Info.Chat.String(),
-				"is_group", isGroup)
-			return
-		}
-
 		if loc := v.Message.GetLocationMessage(); loc != nil {
 			fmt.Printf("Accuracy: %d\n", loc.AccuracyInMeters)
 			fmt.Printf("Latitude: %f\n", loc.GetDegreesLatitude())
@@ -295,11 +288,18 @@ func (b *Bot) eventHandler(evt any, handlerPrefix string) {
 			}
 
 			if strings.HasPrefix(messageText, handlerPrefix) {
-				// Handle as command
-				b.handleCommand(v, handlerPrefix)
+				if !b.isAllowed(v.Info.Chat.String(), isGroup) {
+					b.logger.Warn("Command from non-allowed source ignored",
+						"jid", v.Info.Chat.String(),
+						"is_group", isGroup)
+				} else {
+					b.handleCommand(v, handlerPrefix)
+				}
 			}
 		}
-		b.handleRegularMessage(v)
+		if b.isAllowed(v.Info.Chat.String(), isGroup) {
+			b.handleRegularMessage(v)
+		}
 
 		if isGroup {
 			b.logger.Debug("Received group message", "jid", v.Info.Chat.String())
