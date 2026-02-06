@@ -5,7 +5,7 @@
 WhatsApp CLI and Bot framework.
 
 > [!WARNING]
-> This is highly experimental, badly documented, and handles very sensitive (you whatshaps and auth tokens) data. Use at your own risk.
+> This is highly experimental, badly documented, and handles/stores very sensitive data (you messages and WhatsApp auth tokens). Use at your own risk.
 
 ## Features
 
