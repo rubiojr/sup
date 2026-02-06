@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/epheo/anytype-go"
-	_ "github.com/epheo/anytype-go/client"
+	"github.com/rubiojr/anytype-go"
+	_ "github.com/rubiojr/anytype-go/client"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types/events"
 

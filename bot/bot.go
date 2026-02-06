@@ -31,6 +31,8 @@ type Bot struct {
 	trigger       string
 	cache         cache.Cache
 	store         store.Store
+	allowedGroups map[string]struct{}
+	allowedUsers  map[string]struct{}
 }
 
 // Option is a function that configures the Bot
@@ -89,6 +91,30 @@ func WithCache(cache cache.Cache) Option {
 func WithStore(store store.Store) Option {
 	return func(b *Bot) {
 		b.store = store
+	}
+}
+
+// WithAllowedGroups sets the allowed group JIDs.
+// Only messages from these groups will be processed.
+// An empty list means no groups are allowed.
+func WithAllowedGroups(groups []string) Option {
+	return func(b *Bot) {
+		b.allowedGroups = make(map[string]struct{}, len(groups))
+		for _, g := range groups {
+			b.allowedGroups[g] = struct{}{}
+		}
+	}
+}
+
+// WithAllowedUsers sets the allowed user JIDs.
+// Only messages from these users will be processed.
+// An empty list means no users are allowed.
+func WithAllowedUsers(users []string) Option {
+	return func(b *Bot) {
+		b.allowedUsers = make(map[string]struct{}, len(users))
+		for _, u := range users {
+			b.allowedUsers[u] = struct{}{}
+		}
 	}
 }
 
@@ -238,12 +264,20 @@ func (b *Bot) UnloadPlugins() error {
 func (b *Bot) eventHandler(evt any, handlerPrefix string) {
 	switch v := evt.(type) {
 	case *events.Message:
+		isGroup := v.Info.Chat.Server == types.GroupServer
+
+		if !b.isAllowed(v.Info.Chat.String(), isGroup) {
+			b.logger.Warn("Message from non-allowed source ignored",
+				"jid", v.Info.Chat.String(),
+				"is_group", isGroup)
+			return
+		}
+
 		if loc := v.Message.GetLocationMessage(); loc != nil {
 			fmt.Printf("Accuracy: %d\n", loc.AccuracyInMeters)
 			fmt.Printf("Latitude: %f\n", loc.GetDegreesLatitude())
 			fmt.Printf("Longitude: %f\n", loc.GetDegreesLongitude())
 		}
-		isGroup := v.Info.Chat.Server == types.GroupServer
 		if v.Message.GetConversation() != "" || v.Message.GetExtendedTextMessage() != nil {
 			var messageText string
 			if v.Message.GetConversation() != "" {
@@ -380,4 +414,20 @@ func (b *Bot) RegisterDefaultHandlers() error {
 	}
 
 	return nil
+}
+
+// isAllowed checks if a message source is in the allow list.
+func (b *Bot) isAllowed(jid string, isGroup bool) bool {
+	if isGroup {
+		if b.allowedGroups == nil {
+			return false
+		}
+		_, ok := b.allowedGroups[jid]
+		return ok
+	}
+	if b.allowedUsers == nil {
+		return false
+	}
+	_, ok := b.allowedUsers[jid]
+	return ok
 }

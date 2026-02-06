@@ -2,3 +2,4 @@
 .zig-cache
 bin/
 /registry/
+/sup

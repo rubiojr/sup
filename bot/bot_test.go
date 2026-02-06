@@ -164,7 +164,9 @@ func TestWildcardHandler(t *testing.T) {
 }
 
 func TestWildcardHandlerWithCommandMessage(t *testing.T) {
-	bot, err := newTestBot(t)
+	bot, err := newTestBot(t,
+		WithAllowedUsers([]string{"user@example.com@s.whatsapp.net"}),
+	)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -442,4 +444,117 @@ func containsAt(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestAllowListBlocksUnknownUser(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	bot, err := newTestBot(t,
+		WithLogger(logger),
+		WithAllowedUsers([]string{"allowed@s.whatsapp.net"}),
+	)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	mock := &mockHandler{}
+	if err := bot.RegisterHandler(mock); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := createMockMessage(".sup test", "blocked@example.com")
+	bot.eventHandler(msg, ".sup")
+
+	if mock.called {
+		t.Fatal("Handler should not have been called for non-allowed user")
+	}
+	if !contains(buf.String(), "non-allowed") {
+		t.Errorf("Expected warn log about non-allowed source, got: %s", buf.String())
+	}
+}
+
+func TestAllowListPermitsUser(t *testing.T) {
+	bot, err := newTestBot(t,
+		WithAllowedUsers([]string{"allowed@s.whatsapp.net"}),
+	)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	mock := &mockHandler{}
+	if err := bot.RegisterHandler(mock); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := createMockMessage(".sup test", "allowed")
+	msg.Info.Chat.Server = types.DefaultUserServer
+	bot.eventHandler(msg, ".sup")
+
+	if !mock.called {
+		t.Fatal("Handler should have been called for allowed user")
+	}
+}
+
+func TestAllowListBlocksUnknownGroup(t *testing.T) {
+	bot, err := newTestBot(t,
+		WithAllowedGroups([]string{"allowed-group@g.us"}),
+	)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	mock := &mockHandler{}
+	if err := bot.RegisterHandler(mock); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := createMockMessage(".sup test", "other-group")
+	msg.Info.Chat.Server = types.GroupServer
+	bot.eventHandler(msg, ".sup")
+
+	if mock.called {
+		t.Fatal("Handler should not have been called for non-allowed group")
+	}
+}
+
+func TestAllowListPermitsGroup(t *testing.T) {
+	bot, err := newTestBot(t,
+		WithAllowedGroups([]string{"allowed-group@g.us"}),
+	)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	mock := &mockHandler{}
+	if err := bot.RegisterHandler(mock); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := createMockMessage(".sup test", "allowed-group")
+	msg.Info.Chat.Server = types.GroupServer
+	bot.eventHandler(msg, ".sup")
+
+	if !mock.called {
+		t.Fatal("Handler should have been called for allowed group")
+	}
+}
+
+func TestEmptyAllowListDeniesAll(t *testing.T) {
+	bot, err := newTestBot(t)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	mock := &mockHandler{}
+	if err := bot.RegisterHandler(mock); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := createMockMessage(".sup test", "anyone")
+	bot.eventHandler(msg, ".sup")
+
+	if mock.called {
+		t.Fatal("Handler should not have been called when allow lists are nil (deny all)")
+	}
 }

@@ -13,6 +13,10 @@ func DataDir() string {
 	return filepath.Join(UserHome(), ".local/share/sup")
 }
 
+func ConfigDir() string {
+	return filepath.Join(UserHome(), ".config/sup")
+}
+
 func HandlerDataDir(handler string) string {
 	return filepath.Join(DataDir(), handler)
 }
