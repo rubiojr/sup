@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1792 1024">
+  <defs>
+    <!-- terminal green glow -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- subtle noise texture -->
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" result="n"/>
+      <feColorMatrix type="saturate" values="0" in="n" result="ng"/>
+      <feBlend in="SourceGraphic" in2="ng" mode="multiply" result="blended"/>
+      <feComponentTransfer in="blended">
+        <feFuncA type="linear" slope="1"/>
+      </feComponentTransfer>
+    </filter>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="termGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1f2b"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="bubbleGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#25d366"/>
+      <stop offset="100%" stop-color="#128c7e"/>
+    </linearGradient>
+    <linearGradient id="bubbleGrad2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#34b7f1"/>
+      <stop offset="100%" stop-color="#2a80b9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="1792" height="1024" fill="url(#bg)" filter="url(#noise)"/>
+
+  <!-- decorative grid dots -->
+  <g opacity="0.06" fill="#58a6ff">
+    <circle cx="80" cy="80" r="2"/><circle cx="160" cy="80" r="2"/><circle cx="240" cy="80" r="2"/><circle cx="320" cy="80" r="2"/><circle cx="400" cy="80" r="2"/>
+    <circle cx="80" cy="160" r="2"/><circle cx="160" cy="160" r="2"/><circle cx="240" cy="160" r="2"/><circle cx="320" cy="160" r="2"/><circle cx="400" cy="160" r="2"/>
+    <circle cx="80" cy="240" r="2"/><circle cx="160" cy="240" r="2"/><circle cx="240" cy="240" r="2"/><circle cx="320" cy="240" r="2"/><circle cx="400" cy="240" r="2"/>
+    <circle cx="1392" cy="784" r="2"/><circle cx="1472" cy="784" r="2"/><circle cx="1552" cy="784" r="2"/><circle cx="1632" cy="784" r="2"/><circle cx="1712" cy="784" r="2"/>
+    <circle cx="1392" cy="864" r="2"/><circle cx="1472" cy="864" r="2"/><circle cx="1552" cy="864" r="2"/><circle cx="1632" cy="864" r="2"/><circle cx="1712" cy="864" r="2"/>
+    <circle cx="1392" cy="944" r="2"/><circle cx="1472" cy="944" r="2"/><circle cx="1552" cy="944" r="2"/><circle cx="1632" cy="944" r="2"/><circle cx="1712" cy="944" r="2"/>
+  </g>
+
+  <!-- terminal window -->
+  <g transform="translate(296, 60)">
+    <!-- shadow -->
+    <rect x="10" y="10" width="1200" height="620" rx="18" fill="#000" opacity="0.3"/>
+    <!-- body -->
+    <rect width="1200" height="620" rx="18" fill="url(#termGrad)" stroke="#30363d" stroke-width="2"/>
+    <!-- title bar -->
+    <rect width="1200" height="52" rx="18" fill="#21262d"/>
+    <rect y="36" width="1200" height="16" fill="#21262d"/>
+    <!-- traffic lights -->
+    <circle cx="32" cy="26" r="8" fill="#f85149"/>
+    <circle cx="58" cy="26" r="8" fill="#f0b72f"/>
+    <circle cx="84" cy="26" r="8" fill="#3fb950"/>
+    <!-- title -->
+    <text x="600" y="33" text-anchor="middle" font-family="'SF Mono','Fira Code','Cascadia Code',monospace" font-size="18" fill="#8b949e">sup — WhatsApp Bot &amp; CLI</text>
+
+    <!-- terminal content -->
+    <g font-family="'SF Mono','Fira Code','Cascadia Code',monospace" font-size="28">
+      <!-- prompt 1 -->
+      <text x="40" y="110">
+        <tspan fill="#3fb950">❯ </tspan>
+        <tspan fill="#79c0ff">sup</tspan>
+        <tspan fill="#8b949e"> send </tspan>
+        <tspan fill="#a5d6ff">"Good morning!"</tspan>
+      </text>
+      <text x="40" y="152" fill="#3fb950">✓ Message sent</text>
+
+      <!-- prompt 2 -->
+      <text x="40" y="216">
+        <tspan fill="#3fb950">❯ </tspan>
+        <tspan fill="#79c0ff">sup</tspan>
+        <tspan fill="#8b949e"> plugin list</tspan>
+      </text>
+      <text x="40" y="256" fill="#8b949e">  agendalo    </text>
+      <text x="310" y="256" fill="#3fb950">● loaded</text>
+      <text x="40" y="292" fill="#8b949e">  reminders   </text>
+      <text x="310" y="292" fill="#3fb950">● loaded</text>
+      <text x="40" y="328" fill="#8b949e">  stickers    </text>
+      <text x="310" y="328" fill="#3fb950">● loaded</text>
+
+      <!-- prompt 3 -->
+      <text x="40" y="392">
+        <tspan fill="#3fb950">❯ </tspan>
+        <tspan fill="#79c0ff">sup</tspan>
+        <tspan fill="#8b949e"> bot start</tspan>
+      </text>
+      <text x="40" y="434" fill="#f0b72f">⚡ Bot running — 3 plugins active</text>
+
+      <!-- cursor -->
+      <text x="40" y="498">
+        <tspan fill="#3fb950">❯ </tspan>
+      </text>
+      <rect x="68" y="478" width="16" height="28" fill="#3fb950" opacity="0.8">
+        <animate attributeName="opacity" values="0.8;0;0.8" dur="1.2s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+  </g>
+
+  <!-- floating chat bubbles -->
+  <!-- right side bubble -->
+  <g transform="translate(1440, 110)">
+    <rect width="320" height="82" rx="32" fill="url(#bubbleGrad)" opacity="0.9"/>
+    <polygon points="32,82 58,82 18,108" fill="#25d366" opacity="0.9"/>
+    <text x="36" y="52" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="32" fill="#fff" font-weight="700">.sup agenda list</text>
+  </g>
+
+  <!-- left side bubble -->
+  <g transform="translate(20, 240)">
+    <rect width="420" height="82" rx="32" fill="url(#bubbleGrad2)" opacity="0.85"/>
+    <polygon points="380,82 356,82 394,108" fill="#34b7f1" opacity="0.85"/>
+    <text x="195" y="52" text-anchor="middle" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="32" fill="#fff" font-weight="700">📅 3 events upcoming</text>
+  </g>
+
+  <!-- small decorative bubble -->
+  <g transform="translate(1480, 480)">
+    <rect width="280" height="74" rx="28" fill="url(#bubbleGrad)" opacity="0.7"/>
+    <polygon points="32,74 54,74 18,98" fill="#25d366" opacity="0.7"/>
+    <text x="32" y="48" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="30" fill="#fff" font-weight="700">.sup ping 🏓</text>
+  </g>
+
+  <!-- tiny floating elements -->
+  <g opacity="0.15">
+    <rect x="60" y="720" width="40" height="40" rx="8" fill="#58a6ff" transform="rotate(15,80,740)"/>
+    <rect x="1700" y="80" width="30" height="30" rx="6" fill="#3fb950" transform="rotate(-20,1715,95)"/>
+    <circle cx="120" cy="140" r="15" fill="#f0b72f"/>
+    <circle cx="1680" cy="700" r="12" fill="#f85149"/>
+  </g>
+
+  <!-- WASM chip icon bottom-left -->
+  <g transform="translate(60, 830)" opacity="0.12">
+    <rect width="70" height="50" rx="8" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
+    <text x="35" y="32" text-anchor="middle" font-family="monospace" font-size="14" fill="#58a6ff" font-weight="bold">WASM</text>
+    <!-- pins -->
+    <line x1="15" y1="0" x2="15" y2="-10" stroke="#58a6ff" stroke-width="2.5"/>
+    <line x1="35" y1="0" x2="35" y2="-10" stroke="#58a6ff" stroke-width="2.5"/>
+    <line x1="55" y1="0" x2="55" y2="-10" stroke="#58a6ff" stroke-width="2.5"/>
+    <line x1="15" y1="50" x2="15" y2="60" stroke="#58a6ff" stroke-width="2.5"/>
+    <line x1="35" y1="50" x2="35" y2="60" stroke="#58a6ff" stroke-width="2.5"/>
+    <line x1="55" y1="50" x2="55" y2="60" stroke="#58a6ff" stroke-width="2.5"/>
+  </g>
+
+  <!-- subtle Go reference bottom-right -->
+  <g transform="translate(1660, 860)" opacity="0.1">
+    <text font-family="monospace" font-size="48" fill="#79c0ff">Go</text>
+  </g>
+
+  <!-- bottom tagline -->
+  <text x="896" y="980" text-anchor="middle" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="22" fill="#8b949e" letter-spacing="3">
+    WHATSAPP CLI &amp; BOT FRAMEWORK
+  </text>
+</svg>
