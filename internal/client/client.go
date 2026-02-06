@@ -229,7 +229,7 @@ func (c *Client) SendAudio(recipientJID types.JID, audioPath string) error {
 }
 
 func (c *Client) GetJoinedGroups() ([]*types.GroupInfo, error) {
-	return c.whatsmeowClient.GetJoinedGroups()
+	return c.whatsmeowClient.GetJoinedGroups(context.Background())
 }
 
 func (c *Client) GetAllContacts() (map[types.JID]types.ContactInfo, error) {

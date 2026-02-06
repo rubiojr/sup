@@ -10,13 +10,30 @@ import (
 
 	"github.com/rubiojr/sup/bot/handlers"
 	"github.com/rubiojr/sup/cache"
+	"github.com/rubiojr/sup/store"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
+// newTestBot creates a bot with temp cache and store for testing
+func newTestBot(t *testing.T, opts ...Option) (*Bot, error) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	c, err := cache.NewCache(filepath.Join(tmpDir, "cache.db"))
+	if err != nil {
+		return nil, err
+	}
+	s, err := store.NewStore(filepath.Join(tmpDir, "store.db"))
+	if err != nil {
+		return nil, err
+	}
+	opts = append([]Option{WithCache(c), WithStore(s)}, opts...)
+	return New(opts...)
+}
+
 func TestNew(t *testing.T) {
-	bot, err := New()
+	bot, err := newTestBot(t)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -40,7 +57,7 @@ func TestNewWithCustomLogger(t *testing.T) {
 		Level: slog.LevelDebug,
 	}))
 
-	bot, err := New(WithLogger(logger))
+	bot, err := newTestBot(t, WithLogger(logger))
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -65,7 +82,7 @@ func TestNewWithCustomLogger(t *testing.T) {
 }
 
 func TestRegisterHandler(t *testing.T) {
-	bot, err := New()
+	bot, err := newTestBot(t)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -91,7 +108,7 @@ func TestStartWithCancellation(t *testing.T) {
 		Level: slog.LevelDebug,
 	}))
 
-	bot, err := New(WithLogger(logger))
+	bot, err := newTestBot(t, WithLogger(logger))
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -116,7 +133,7 @@ func TestStartWithCancellation(t *testing.T) {
 }
 
 func TestWildcardHandler(t *testing.T) {
-	bot, err := New()
+	bot, err := newTestBot(t)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -147,7 +164,7 @@ func TestWildcardHandler(t *testing.T) {
 }
 
 func TestWildcardHandlerWithCommandMessage(t *testing.T) {
-	bot, err := New()
+	bot, err := newTestBot(t)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -199,7 +216,7 @@ func TestBotCache(t *testing.T) {
 	}
 
 	// Create bot with cache
-	bot, err := New(WithCache(cache))
+	bot, err := newTestBot(t, WithCache(cache))
 	if err != nil {
 		t.Fatalf("New() with cache returned error: %v", err)
 	}
@@ -230,7 +247,7 @@ func TestBotCache(t *testing.T) {
 }
 
 func TestBotStore(t *testing.T) {
-	bot, err := New()
+	bot, err := newTestBot(t)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}

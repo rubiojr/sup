@@ -282,6 +282,9 @@ func (b *Bot) handleCommand(msg *events.Message, handlerPrefix string) {
 	parts := strings.Split(command, " ")
 
 	commandName := parts[0]
+	if commandName == "" {
+		commandName = "help"
+	}
 	args := []string{}
 	if len(parts) > 1 {
 		args = parts[1:]
