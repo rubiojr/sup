@@ -41,10 +41,29 @@ type Plugin interface {
 	Version() string
 }
 
+// CLIPlugin is an optional interface plugins can implement to expose CLI commands.
+type CLIPlugin interface {
+	Plugin
+	HandleCLI(input CLIInput) CLIOutput
+}
+
+// CLIInput represents the input data passed to a plugin's CLI handler.
+type CLIInput struct {
+	Args []string `json:"args"`
+}
+
+// CLIOutput represents the response from a plugin's CLI handler.
+type CLIOutput struct {
+	Success bool   `json:"success"`
+	Output  string `json:"output,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 // Store interface for plugin storage operations
 type Store interface {
 	Get(key string) ([]byte, error)
 	Set(key string, value []byte) error
+	List(prefix string) ([]string, error)
 }
 
 // Success creates a successful output with a reply message

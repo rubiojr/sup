@@ -56,6 +56,11 @@ func (p *AgendaloPlugin) HandleMessage(input plugin.Input) plugin.Output {
 
 	storeKey := agendaKey(sender, isGroup)
 
+	// Store sender name for CLI display
+	if input.Info.PushName != "" {
+		plugin.Storage().Set(fmt.Sprintf("name:%s", sender), []byte(input.Info.PushName))
+	}
+
 	if text == "" || text == "list" || text == "ls" {
 		return listEvents(storeKey)
 	}
@@ -276,6 +281,112 @@ func (p *AgendaloPlugin) GetRequiredEnvVars() []string {
 
 func (p *AgendaloPlugin) Version() string {
 	return "0.1.0"
+}
+
+func (p *AgendaloPlugin) HandleCLI(input plugin.CLIInput) plugin.CLIOutput {
+	args := input.Args
+	cmd := "list"
+	if len(args) > 0 {
+		cmd = args[0]
+	}
+
+	switch cmd {
+	case "list", "ls":
+		showAll := false
+		sender := ""
+		if len(args) > 1 {
+			for _, a := range args[1:] {
+				if a == "--all" || a == "-a" {
+					showAll = true
+				} else if sender == "" {
+					sender = a
+				}
+			}
+		}
+		return p.cliList(sender, showAll)
+	case "clear":
+		if len(args) < 2 {
+			return plugin.CLIOutput{Success: false, Error: "Usage: clear <sender>"}
+		}
+		return p.cliClear(args[1])
+	default:
+		return plugin.CLIOutput{Success: false, Error: fmt.Sprintf("Unknown command: %s\nAvailable: list [--all] [sender], clear <sender>", cmd)}
+	}
+}
+
+func (p *AgendaloPlugin) cliList(sender string, showAll bool) plugin.CLIOutput {
+	store := plugin.Storage()
+	now := time.Now()
+
+	if sender != "" {
+		output := formatSenderAgenda(store, sender, now, showAll)
+		return plugin.CLIOutput{Success: true, Output: output}
+	}
+
+	// List all agendas
+	keys, err := store.List("agenda:")
+	if err != nil {
+		return plugin.CLIOutput{Success: false, Error: fmt.Sprintf("Failed to list keys: %v", err)}
+	}
+
+	if len(keys) == 0 {
+		return plugin.CLIOutput{Success: true, Output: "No agendas found.\n"}
+	}
+
+	var sb strings.Builder
+	for _, key := range keys {
+		s := strings.TrimPrefix(key, "agenda:")
+		label := s
+		if name, err := store.Get(fmt.Sprintf("name:%s", s)); err == nil && name != nil && len(name) > 0 {
+			label = fmt.Sprintf("%s (%s)", string(name), s)
+		}
+		sb.WriteString(fmt.Sprintf("── %s ──\n", label))
+		sb.WriteString(formatSenderAgenda(store, s, now, showAll))
+		sb.WriteString("\n")
+	}
+
+	return plugin.CLIOutput{Success: true, Output: sb.String()}
+}
+
+func formatSenderAgenda(store plugin.Store, sender string, now time.Time, showAll bool) string {
+	key := fmt.Sprintf("agenda:%s", sender)
+	data, err := store.Get(key)
+	if err != nil || data == nil {
+		return "  No events.\n"
+	}
+
+	var events []StoredEvent
+	if err := json.Unmarshal(data, &events); err != nil {
+		return "  Error reading events.\n"
+	}
+
+	var sb strings.Builder
+	count := 0
+	for _, evt := range events {
+		t, err := parseEventDate(evt.Date)
+		if !showAll && err == nil && t.Before(now) {
+			continue
+		}
+		count++
+		dateStr := evt.Date
+		if err == nil {
+			dateStr = t.Format("Mon 02 Jan 2006 15:04")
+		}
+		sb.WriteString(fmt.Sprintf("  %d. %s — %s\n", count, evt.Name, dateStr))
+	}
+
+	if count == 0 {
+		return "  No upcoming events.\n"
+	}
+	return sb.String()
+}
+
+func (p *AgendaloPlugin) cliClear(sender string) plugin.CLIOutput {
+	key := fmt.Sprintf("agenda:%s", sender)
+	if err := saveEvents(key, nil); err != nil {
+		return plugin.CLIOutput{Success: false, Error: fmt.Sprintf("Failed to clear: %v", err)}
+	}
+	return plugin.CLIOutput{Success: true, Output: fmt.Sprintf("Cleared agenda for %s\n", sender)}
 }
 
 func init() {

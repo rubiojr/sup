@@ -95,6 +95,25 @@ func get_version() int32 {
 	return 0
 }
 
+//export handle_cli
+func handle_cli() int32 {
+	cliPlugin, ok := pluginInstance.(CLIPlugin)
+	if !ok {
+		pdk.OutputJSON(CLIOutput{Success: false, Error: "Plugin does not support CLI commands."})
+		return 1
+	}
+
+	var req CLIInput
+	if err := pdk.InputJSON(&req); err != nil {
+		pdk.OutputJSON(CLIOutput{Success: false, Error: fmt.Sprintf("Failed to parse CLI input: %v", err)})
+		return 1
+	}
+
+	output := cliPlugin.HandleCLI(req)
+	pdk.OutputJSON(output)
+	return 0
+}
+
 func outputError(message string) {
 	pdk.OutputJSON(Output{Success: false, Error: message})
 }
@@ -119,6 +138,9 @@ func hostGetStore(keyPtr uint64) uint64
 
 //go:wasmimport extism:host/user set_store
 func hostSetStore(dataPtr uint64) uint32
+
+//go:wasmimport extism:host/user list_store
+func hostListStore(prefixPtr uint64) uint64
 
 //go:wasmimport extism:host/user exec_command
 func hostExecCommand(dataPtr uint64) uint64
@@ -323,6 +345,33 @@ func (s *storageImpl) Set(key string, value []byte) error {
 	}
 
 	return nil
+}
+
+type storeListResponse struct {
+	Success bool     `json:"success"`
+	Keys    []string `json:"keys,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
+func (s *storageImpl) List(prefix string) ([]string, error) {
+	prefixMem := pdk.AllocateString(prefix)
+	resultMem := hostListStore(prefixMem.Offset())
+
+	data := pdk.FindMemory(resultMem)
+	if data.Length() == 0 {
+		return nil, fmt.Errorf("failed to list store keys")
+	}
+
+	var response storeListResponse
+	if err := json.Unmarshal(data.ReadBytes(), &response); err != nil {
+		return nil, fmt.Errorf("failed to parse store list response: %w", err)
+	}
+
+	if !response.Success {
+		return nil, fmt.Errorf("store list failed: %s", response.Error)
+	}
+
+	return response.Keys, nil
 }
 
 // Storage returns a Store interface for plugin storage operations

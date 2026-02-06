@@ -12,6 +12,13 @@ type Handler interface {
 	Version() string
 }
 
+// CLIHandler is an optional interface handlers can implement to expose CLI commands.
+type CLIHandler interface {
+	Handler
+	HandleCLI(args []string) (string, error)
+	SupportsCLI() bool
+}
+
 type HandlerHelp struct {
 	Name        string
 	Description string

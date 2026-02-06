@@ -8,6 +8,10 @@ import (
 
 	"github.com/rubiojr/sup/bot"
 	"github.com/rubiojr/sup/bot/handlers"
+	"github.com/rubiojr/sup/cache"
+	"github.com/rubiojr/sup/internal/botfs"
+	"github.com/rubiojr/sup/internal/config"
+	"github.com/rubiojr/sup/store"
 	"github.com/urfave/cli/v3"
 )
 
@@ -30,6 +34,12 @@ var pluginsCmd = &cli.Command{
 			Usage:     "Remove an installed plugin",
 			ArgsUsage: "<plugin-name>",
 			Action:    pluginRemoveAction,
+		},
+		{
+			Name:      "run",
+			Usage:     "Run a plugin's CLI command",
+			ArgsUsage: "<plugin-name> [args...]",
+			Action:    pluginRunAction,
 		},
 		pluginStoreCmd,
 	},
@@ -158,6 +168,62 @@ func pluginRemoveAction(ctx context.Context, c *cli.Command) error {
 	}
 
 	fmt.Printf("Successfully removed plugin '%s'\n", pluginName)
+
+	return nil
+}
+
+func pluginRunAction(ctx context.Context, c *cli.Command) error {
+	if c.Args().Len() == 0 {
+		return fmt.Errorf("plugin name required\nUsage: sup plugins run <plugin-name> [args...]")
+	}
+
+	pluginName := c.Args().First()
+
+	// Load config for allowed commands
+	cfg, _ := config.Load(config.DefaultPath())
+	var allowedCommands []string
+	if cfg != nil {
+		allowedCommands = cfg.Plugins.AllowedCommands
+	}
+
+	// Load the plugin
+	pluginDir := getDefaultPluginDir()
+	wasmPath := filepath.Join(pluginDir, fmt.Sprintf("%s.wasm", pluginName))
+	if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
+		return fmt.Errorf("plugin '%s' not found at %s", pluginName, wasmPath)
+	}
+
+	storePath := filepath.Join(botfs.DataDir(), "store", "store.db")
+	s, err := store.NewStore(storePath)
+	if err != nil {
+		return fmt.Errorf("failed to open store: %w", err)
+	}
+
+	cachePath := filepath.Join(botfs.DataDir(), "cache", "cache.db")
+	c2, err := cache.NewCache(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to open cache: %w", err)
+	}
+
+	handler, err := handlers.NewWasmHandler(wasmPath, c2.Namespace(pluginName), s.Namespace(pluginName), allowedCommands)
+	if err != nil {
+		return fmt.Errorf("failed to load plugin: %w", err)
+	}
+
+	if !handler.SupportsCLI() {
+		return fmt.Errorf("plugin '%s' does not support CLI commands", pluginName)
+	}
+
+	// Pass remaining args (after plugin name)
+	args := c.Args().Tail()
+	output, err := handler.HandleCLI(args)
+	if err != nil {
+		return err
+	}
+
+	if output != "" {
+		fmt.Print(output)
+	}
 
 	return nil
 }

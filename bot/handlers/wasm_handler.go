@@ -88,6 +88,13 @@ type ExecCommandResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
+// StoreListResponse is the JSON structure returned to plugins from list_store.
+type StoreListResponse struct {
+	Success bool     `json:"success"`
+	Keys    []string `json:"keys,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
 func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allowedCommands []string) (*WasmHandler, error) {
 	ctx := context.Background()
 
@@ -262,8 +269,18 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allow
 		extism.NewHostFunctionWithStack(
 			"exec_command",
 			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
-				// For temp plugin, return error
 				resp := ExecCommandResponse{Success: false, Error: "exec_command not available in temp plugin"}
+				respData, _ := json.Marshal(resp)
+				offset, _ := p.WriteString(string(respData))
+				stack[0] = offset
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI64},
+		),
+		extism.NewHostFunctionWithStack(
+			"list_store",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				resp := StoreListResponse{Success: false, Error: "list_store not available in temp plugin"}
 				respData, _ := json.Marshal(resp)
 				offset, _ := p.WriteString(string(respData))
 				stack[0] = offset
@@ -713,6 +730,44 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allow
 			[]extism.ValueType{extism.ValueTypeI64},
 			[]extism.ValueType{extism.ValueTypeI64},
 		),
+		extism.NewHostFunctionWithStack(
+			"list_store",
+			func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+				dataOffset := extism.DecodeU32(stack[0])
+				prefix, err := p.ReadString(uint64(dataOffset))
+				if err != nil {
+					resp := StoreListResponse{Success: false, Error: "failed to read prefix"}
+					respData, _ := json.Marshal(resp)
+					offset, _ := p.WriteString(string(respData))
+					stack[0] = offset
+					return
+				}
+
+				if store == nil {
+					resp := StoreListResponse{Success: false, Error: "Store not available"}
+					respData, _ := json.Marshal(resp)
+					offset, _ := p.WriteString(string(respData))
+					stack[0] = offset
+					return
+				}
+
+				keys, err := store.List(prefix)
+				if err != nil {
+					resp := StoreListResponse{Success: false, Error: err.Error()}
+					respData, _ := json.Marshal(resp)
+					offset, _ := p.WriteString(string(respData))
+					stack[0] = offset
+					return
+				}
+
+				resp := StoreListResponse{Success: true, Keys: keys}
+				respData, _ := json.Marshal(resp)
+				offset, _ := p.WriteString(string(respData))
+				stack[0] = offset
+			},
+			[]extism.ValueType{extism.ValueTypeI64},
+			[]extism.ValueType{extism.ValueTypeI64},
+		),
 	}
 
 	plugin, err := extism.NewPlugin(ctx, manifest, config, hostFunctions)
@@ -910,6 +965,48 @@ func (w *WasmHandler) Version() string {
 		return "unknown"
 	}
 	return string(outputData)
+}
+
+// SupportsCLI returns true if the plugin exports handle_cli.
+func (w *WasmHandler) SupportsCLI() bool {
+	return w.plugin.FunctionExists("handle_cli")
+}
+
+// CLIInput matches the plugin CLIInput type.
+type CLIInput struct {
+	Args []string `json:"args"`
+}
+
+// CLIOutput matches the plugin CLIOutput type.
+type CLIOutput struct {
+	Success bool   `json:"success"`
+	Output  string `json:"output,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// HandleCLI calls the plugin's handle_cli function with the given args.
+func (w *WasmHandler) HandleCLI(args []string) (string, error) {
+	input := CLIInput{Args: args}
+	inputData, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal CLI input: %w", err)
+	}
+
+	exit, outputData, err := w.plugin.Call("handle_cli", inputData)
+	if err != nil {
+		return "", fmt.Errorf("plugin CLI call failed with exit code %d: %w", exit, err)
+	}
+
+	var output CLIOutput
+	if err := json.Unmarshal(outputData, &output); err != nil {
+		return "", fmt.Errorf("failed to parse CLI output: %w", err)
+	}
+
+	if !output.Success {
+		return "", fmt.Errorf("%s", output.Error)
+	}
+
+	return output.Output, nil
 }
 
 // getRequiredEnvVars queries a WASM plugin for its required environment variables
