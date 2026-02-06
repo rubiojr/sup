@@ -98,7 +98,7 @@
   <g transform="translate(1440, 110)">
     <rect width="320" height="82" rx="32" fill="url(#bubbleGrad)" opacity="0.9"/>
     <polygon points="32,82 58,82 18,108" fill="#25d366" opacity="0.9"/>
-    <text x="36" y="52" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="32" fill="#fff" font-weight="700">.sup agenda list</text>
+    <text x="160" y="52" text-anchor="middle" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="32" fill="#fff" font-weight="700">.sup agenda list</text>
   </g>
 
   <!-- left side bubble -->
@@ -112,33 +112,7 @@
   <g transform="translate(1480, 480)">
     <rect width="280" height="74" rx="28" fill="url(#bubbleGrad)" opacity="0.7"/>
     <polygon points="32,74 54,74 18,98" fill="#25d366" opacity="0.7"/>
-    <text x="32" y="48" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="30" fill="#fff" font-weight="700">.sup ping 🏓</text>
-  </g>
-
-  <!-- tiny floating elements -->
-  <g opacity="0.15">
-    <rect x="60" y="720" width="40" height="40" rx="8" fill="#58a6ff" transform="rotate(15,80,740)"/>
-    <rect x="1700" y="80" width="30" height="30" rx="6" fill="#3fb950" transform="rotate(-20,1715,95)"/>
-    <circle cx="120" cy="140" r="15" fill="#f0b72f"/>
-    <circle cx="1680" cy="700" r="12" fill="#f85149"/>
-  </g>
-
-  <!-- WASM chip icon bottom-left -->
-  <g transform="translate(60, 830)" opacity="0.12">
-    <rect width="70" height="50" rx="8" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
-    <text x="35" y="32" text-anchor="middle" font-family="monospace" font-size="14" fill="#58a6ff" font-weight="bold">WASM</text>
-    <!-- pins -->
-    <line x1="15" y1="0" x2="15" y2="-10" stroke="#58a6ff" stroke-width="2.5"/>
-    <line x1="35" y1="0" x2="35" y2="-10" stroke="#58a6ff" stroke-width="2.5"/>
-    <line x1="55" y1="0" x2="55" y2="-10" stroke="#58a6ff" stroke-width="2.5"/>
-    <line x1="15" y1="50" x2="15" y2="60" stroke="#58a6ff" stroke-width="2.5"/>
-    <line x1="35" y1="50" x2="35" y2="60" stroke="#58a6ff" stroke-width="2.5"/>
-    <line x1="55" y1="50" x2="55" y2="60" stroke="#58a6ff" stroke-width="2.5"/>
-  </g>
-
-  <!-- subtle Go reference bottom-right -->
-  <g transform="translate(1660, 860)" opacity="0.1">
-    <text font-family="monospace" font-size="48" fill="#79c0ff">Go</text>
+    <text x="140" y="48" text-anchor="middle" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="30" fill="#fff" font-weight="700">.sup ping 🏓</text>
   </g>
 
   <!-- bottom tagline -->
