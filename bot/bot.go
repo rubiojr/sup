@@ -229,6 +229,10 @@ func (b *Bot) Start(ctx context.Context) error {
 
 	b.logger.Debug("Bot is now running and listening for commands")
 
+	if err := b.pluginManager.WatchPlugins(ctx); err != nil {
+		b.logger.Warn("Failed to start plugin watcher", "error", err)
+	}
+
 	select {
 	case <-ctx.Done():
 		b.logger.Debug("Bot shutting down via context cancellation")

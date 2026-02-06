@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/extism/go-sdk v1.7.1
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gabriel-vasile/mimetype v1.4.9
 	github.com/ncruces/go-sqlite3 v0.26.0
 	github.com/olebedev/when v1.1.0

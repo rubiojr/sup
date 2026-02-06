@@ -43,11 +43,15 @@ func (r *EatBcn) HandleMessage(input plugin.Input) plugin.Output {
 		return plugin.Error("🚫 Not enough restaurants in the list!")
 	}
 
+	// Seed with message timestamp to get different results across invocations.
+	// WASM runtimes don't provide system entropy for automatic seeding.
+	rng := rand.New(rand.NewPCG(uint64(input.Info.Timestamp), uint64(len(input.Message))))
+
 	selected := make([]Restaurant, 0, 3)
 	used := make(map[int]bool)
 
 	for len(selected) < 3 {
-		idx := rand.IntN(len(restaurants))
+		idx := rng.IntN(len(restaurants))
 		if !used[idx] {
 			selected = append(selected, restaurants[idx])
 			used[idx] = true

@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/rubiojr/sup/cache"
 	"github.com/rubiojr/sup/internal/log"
 	"github.com/rubiojr/sup/store"
@@ -14,6 +17,7 @@ import (
 type PluginManager interface {
 	LoadPlugins() error
 	ReloadPlugins() error
+	WatchPlugins(ctx context.Context) error
 	GetAllPlugins() map[string]*WasmHandler
 	GetPlugin(name string) (*WasmHandler, bool)
 	UnloadAll() error
@@ -161,4 +165,72 @@ func (pm *pluginManager) ReloadPlugins() error {
 	}
 
 	return pm.LoadPlugins()
+}
+
+// WatchPlugins watches the plugin directory for .wasm file changes and
+// reloads affected plugins automatically. It blocks until ctx is cancelled.
+func (pm *pluginManager) WatchPlugins(ctx context.Context) error {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("failed to create file watcher: %w", err)
+	}
+
+	if err := watcher.Add(pm.pluginDir); err != nil {
+		watcher.Close()
+		return fmt.Errorf("failed to watch plugin directory %s: %w", pm.pluginDir, err)
+	}
+
+	log.Info("Watching plugin directory for changes", "dir", pm.pluginDir)
+
+	// Debounce: editors often write files in multiple steps (write tmp + rename).
+	// Wait a short period after the last event before reloading.
+	const debounce = 500 * time.Millisecond
+	var debounceTimer *time.Timer
+	pending := make(map[string]bool)
+
+	go func() {
+		defer watcher.Close()
+		for {
+			select {
+			case <-ctx.Done():
+				if debounceTimer != nil {
+					debounceTimer.Stop()
+				}
+				return
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if !strings.HasSuffix(event.Name, ".wasm") {
+					continue
+				}
+				if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
+					continue
+				}
+
+				pending[event.Name] = true
+				if debounceTimer != nil {
+					debounceTimer.Stop()
+				}
+				debounceTimer = time.AfterFunc(debounce, func() {
+					for path := range pending {
+						log.Info("Plugin file changed, reloading", "path", filepath.Base(path))
+						if err := pm.loadPlugin(path); err != nil {
+							log.Error("Failed to reload plugin", "path", filepath.Base(path), "error", err)
+						} else {
+							log.Info("Plugin reloaded successfully", "name", filepath.Base(path))
+						}
+					}
+					pending = make(map[string]bool)
+				})
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.Error("Plugin watcher error", "error", err)
+			}
+		}
+	}()
+
+	return nil
 }
