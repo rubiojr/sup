@@ -116,7 +116,7 @@
   </g>
 
   <!-- bottom tagline -->
-  <text x="896" y="980" text-anchor="middle" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="22" fill="#8b949e" letter-spacing="3">
+  <text x="896" y="730" text-anchor="middle" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="22" fill="#8b949e" letter-spacing="3">
     WHATSAPP CLI &amp; BOT FRAMEWORK
   </text>
 </svg>
