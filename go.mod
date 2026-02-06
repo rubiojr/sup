@@ -1,6 +1,6 @@
 module github.com/rubiojr/sup
 
-go 1.24.3
+go 1.25
 
 require (
 	github.com/charmbracelet/bubbles v0.21.1
