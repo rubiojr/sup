@@ -149,15 +149,16 @@ func updateAgenda(storeKey, text string) plugin.Output {
 	}
 
 	stdout := strings.TrimSpace(resp.Stdout)
-	// Strip markdown code fences if present
-	if strings.HasPrefix(stdout, "```") {
-		lines := strings.Split(stdout, "\n")
-		if len(lines) >= 2 {
-			lines = lines[1 : len(lines)-1]
-			if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "```" {
-				lines = lines[:len(lines)-1]
-			}
-			stdout = strings.TrimSpace(strings.Join(lines, "\n"))
+	// Extract JSON from the first markdown code fence if present,
+	// ignoring any surrounding text the LLM may have added.
+	if idx := strings.Index(stdout, "```"); idx >= 0 {
+		rest := stdout[idx+3:]
+		// Skip optional language tag (e.g. "json")
+		if nl := strings.Index(rest, "\n"); nl >= 0 {
+			rest = rest[nl+1:]
+		}
+		if end := strings.Index(rest, "```"); end >= 0 {
+			stdout = strings.TrimSpace(rest[:end])
 		}
 	}
 
