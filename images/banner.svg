@@ -32,18 +32,8 @@
     </linearGradient>
   </defs>
 
-  <!-- background -->
-  <rect width="1792" height="1024" fill="url(#bg)" filter="url(#noise)"/>
-
-  <!-- decorative grid dots -->
-  <g opacity="0.06" fill="#58a6ff">
-    <circle cx="80" cy="80" r="2"/><circle cx="160" cy="80" r="2"/><circle cx="240" cy="80" r="2"/><circle cx="320" cy="80" r="2"/><circle cx="400" cy="80" r="2"/>
-    <circle cx="80" cy="160" r="2"/><circle cx="160" cy="160" r="2"/><circle cx="240" cy="160" r="2"/><circle cx="320" cy="160" r="2"/><circle cx="400" cy="160" r="2"/>
-    <circle cx="80" cy="240" r="2"/><circle cx="160" cy="240" r="2"/><circle cx="240" cy="240" r="2"/><circle cx="320" cy="240" r="2"/><circle cx="400" cy="240" r="2"/>
-    <circle cx="1392" cy="784" r="2"/><circle cx="1472" cy="784" r="2"/><circle cx="1552" cy="784" r="2"/><circle cx="1632" cy="784" r="2"/><circle cx="1712" cy="784" r="2"/>
-    <circle cx="1392" cy="864" r="2"/><circle cx="1472" cy="864" r="2"/><circle cx="1552" cy="864" r="2"/><circle cx="1632" cy="864" r="2"/><circle cx="1712" cy="864" r="2"/>
-    <circle cx="1392" cy="944" r="2"/><circle cx="1472" cy="944" r="2"/><circle cx="1552" cy="944" r="2"/><circle cx="1632" cy="944" r="2"/><circle cx="1712" cy="944" r="2"/>
-  </g>
+  <!-- background (transparent) -->
+  <!-- decorative grid dots removed for transparent bg -->
 
   <!-- terminal window -->
   <g transform="translate(296, 60)">
