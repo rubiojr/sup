@@ -2,6 +2,10 @@
 
 # Sup
 
+<p align="center">
+  <img src="images/vibecoded.svg" alt="Vibecoded: some or all of this code was written by AI and accepted on vibes" width="800">
+</p>
+
 WhatsApp CLI and Bot framework.
 
 > [!WARNING]
