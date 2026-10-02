@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/extism/go-sdk v1.7.1
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/gabriel-vasile/mimetype v1.4.9
+	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/ncruces/go-sqlite3 v0.26.3
 	github.com/olebedev/when v1.1.0
 	github.com/pelletier/go-toml/v2 v2.2.4
