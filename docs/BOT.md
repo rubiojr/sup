@@ -1,6 +1,8 @@
 # Sup Bot Mode
 
 For template replies to incoming direct messages, see [Auto-reply](AUTOREPLY.md).
+For passive message and attachment storage independent of the allow-list, see
+[Archive](ARCHIVE.md).
 
 Start bot mode to listen for messages and run command handlers:
 

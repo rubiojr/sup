@@ -193,7 +193,7 @@ func TestWildcardHandlerWithCommandMessage(t *testing.T) {
 	msg := createMockMessage(".sup test argument", "user@example.com")
 
 	// Process the message (should trigger command handler)
-	bot.eventHandler(msg, ".sup")
+	bot.eventHandler(t.Context(), msg, ".sup")
 
 	// Verify command handler was called
 	if !mockCommand.called {
@@ -205,7 +205,7 @@ func TestWildcardHandlerWithCommandMessage(t *testing.T) {
 
 	// Create a regular message to test wildcard
 	regularMsg := createMockMessage("Hello world", "user@example.com")
-	bot.eventHandler(regularMsg, ".sup")
+	bot.eventHandler(t.Context(), regularMsg, ".sup")
 
 	// Verify wildcard handler was called for regular message
 	if !mockWildcard.called {
@@ -266,12 +266,17 @@ func TestAutoReplyDoesNotExecuteCommands(t *testing.T) {
 	msg := createMockMessage(".sup test", "123")
 	msg.Info.IsFromMe = true
 	msg.Info.ID = "generated"
-	b.eventHandler(msg, ".sup")
+	capture := &recordingArchive{}
+	WithArchive(capture)(b)
+	b.eventHandler(t.Context(), msg, ".sup")
+	if len(capture.ids) != 1 || capture.ids[0] != "generated" {
+		t.Fatal("auto-reply must be archived before it is filtered from bot routing")
+	}
 	if command.called || wildcard.called {
 		t.Fatal("auto-generated reply reached a handler")
 	}
 	msg.Info.ID = "manual-self-message"
-	b.eventHandler(msg, ".sup")
+	b.eventHandler(t.Context(), msg, ".sup")
 	if !command.called || wildcard.calls != 1 {
 		t.Fatal("manual self-message should still reach both handlers once")
 	}
@@ -317,7 +322,7 @@ func TestAutoReplyDoesNotExecuteCommands(t *testing.T) {
 				msg.Info.IsFromMe = tc.self
 				msg.Info.ID = tc.name
 				msg.Info.Timestamp = time.Now().Add(time.Second)
-				b.eventHandler(msg, ".sup")
+				b.eventHandler(t.Context(), msg, ".sup")
 				var attempts int
 				if err := ledger.QueryRow("SELECT count(*) FROM replies WHERE incoming_id = ?", tc.name).Scan(&attempts); err != nil {
 					t.Fatal(err)
@@ -593,7 +598,7 @@ func TestAllowListBlocksUnknownUser(t *testing.T) {
 	}
 
 	msg := createMockMessage(".sup test", "blocked@example.com")
-	bot.eventHandler(msg, ".sup")
+	bot.eventHandler(t.Context(), msg, ".sup")
 
 	if mock.called {
 		t.Fatal("Handler should not have been called for non-allowed user")
@@ -618,7 +623,7 @@ func TestAllowListPermitsUser(t *testing.T) {
 
 	msg := createMockMessage(".sup test", "allowed")
 	msg.Info.Chat.Server = types.DefaultUserServer
-	bot.eventHandler(msg, ".sup")
+	bot.eventHandler(t.Context(), msg, ".sup")
 
 	if !mock.called {
 		t.Fatal("Handler should have been called for allowed user")
@@ -640,7 +645,7 @@ func TestAllowListBlocksUnknownGroup(t *testing.T) {
 
 	msg := createMockMessage(".sup test", "other-group")
 	msg.Info.Chat.Server = types.GroupServer
-	bot.eventHandler(msg, ".sup")
+	bot.eventHandler(t.Context(), msg, ".sup")
 
 	if mock.called {
 		t.Fatal("Handler should not have been called for non-allowed group")
@@ -662,7 +667,7 @@ func TestAllowListPermitsGroup(t *testing.T) {
 
 	msg := createMockMessage(".sup test", "allowed-group")
 	msg.Info.Chat.Server = types.GroupServer
-	bot.eventHandler(msg, ".sup")
+	bot.eventHandler(t.Context(), msg, ".sup")
 
 	if !mock.called {
 		t.Fatal("Handler should have been called for allowed group")
@@ -681,7 +686,7 @@ func TestEmptyAllowListDeniesAll(t *testing.T) {
 	}
 
 	msg := createMockMessage(".sup test", "anyone")
-	bot.eventHandler(msg, ".sup")
+	bot.eventHandler(t.Context(), msg, ".sup")
 
 	if mock.called {
 		t.Fatal("Handler should not have been called when allow lists are nil (deny all)")

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -20,6 +22,8 @@ import (
 
 type Client struct {
 	whatsmeowClient *whatsmeow.Client
+	sentMu          sync.RWMutex
+	onSent          func(*events.Message)
 }
 
 var (
@@ -96,8 +100,45 @@ func (c *Client) HandlerDataPath(name string) string {
 	return p
 }
 
-func (c *Client) AddEventHandler(handler whatsmeow.EventHandler) {
-	c.whatsmeowClient.AddEventHandler(handler)
+func (c *Client) AddEventHandler(handler whatsmeow.EventHandler) uint32 {
+	return c.whatsmeowClient.AddEventHandler(handler)
+}
+
+// RemoveEventHandler detaches a listener before its resources are closed.
+func (c *Client) RemoveEventHandler(id uint32) {
+	c.whatsmeowClient.RemoveEventHandler(id)
+}
+
+// SetSentMessageObserver installs a passive observer for successful sends.
+// Passing nil removes it. Observed messages must not be routed as bot commands.
+func (c *Client) SetSentMessageObserver(observer func(*events.Message)) {
+	c.sentMu.Lock()
+	defer c.sentMu.Unlock()
+	c.onSent = observer
+}
+
+func (c *Client) notifySent(to types.JID, msg *waE2E.Message, resp whatsmeow.SendResponse) {
+	c.sentMu.RLock()
+	observer := c.onSent
+	c.sentMu.RUnlock()
+	if observer != nil {
+		observer(&events.Message{
+			Info: types.MessageInfo{
+				MessageSource: types.MessageSource{Chat: to, Sender: resp.Sender, IsFromMe: true, IsGroup: to.Server == types.GroupServer},
+				ID:            resp.ID, Timestamp: resp.Timestamp,
+			},
+			Message: msg,
+		})
+	}
+}
+
+func (c *Client) sendMessage(ctx context.Context, to types.JID, msg *waE2E.Message, extra ...whatsmeow.SendRequestExtra) error {
+	resp, err := c.whatsmeowClient.SendMessage(ctx, to, msg, extra...)
+	if err != nil {
+		return err
+	}
+	c.notifySent(to, msg, resp)
+	return nil
 }
 
 func (c *Client) Disconnect() {
@@ -118,7 +159,7 @@ func (c *Client) SendText(recipientJID types.JID, message string) error {
 		Conversation: proto.String(message),
 	}
 
-	_, err := c.whatsmeowClient.SendMessage(context.Background(), recipientJID, msg)
+	err := c.sendMessage(context.Background(), recipientJID, msg)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %w", err)
 	}
@@ -128,7 +169,7 @@ func (c *Client) SendText(recipientJID types.JID, message string) error {
 
 // SendTextWithID sends text using an ID reserved by the caller before delivery.
 func (c *Client) SendTextWithID(ctx context.Context, recipient types.JID, message, id string) error {
-	_, err := c.whatsmeowClient.SendMessage(ctx, recipient, &waE2E.Message{
+	err := c.sendMessage(ctx, recipient, &waE2E.Message{
 		Conversation: proto.String(message),
 	}, whatsmeow.SendRequestExtra{ID: id})
 	if err != nil {
@@ -164,7 +205,7 @@ func (c *Client) SendFile(recipientJID types.JID, filePath string) error {
 		},
 	}
 
-	_, err = c.whatsmeowClient.SendMessage(context.Background(), recipientJID, msg)
+	err = c.sendMessage(context.Background(), recipientJID, msg)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %w", err)
 	}
@@ -197,7 +238,7 @@ func (c *Client) SendImage(recipientJID types.JID, imagePath string) error {
 		},
 	}
 
-	_, err = c.whatsmeowClient.SendMessage(context.Background(), recipientJID, msg)
+	err = c.sendMessage(context.Background(), recipientJID, msg)
 	if err != nil {
 		return fmt.Errorf("failed to send image message: %w", err)
 	}
@@ -231,7 +272,7 @@ func (c *Client) SendAudio(recipientJID types.JID, audioPath string) error {
 		},
 	}
 
-	_, err = c.whatsmeowClient.SendMessage(context.Background(), recipientJID, msg)
+	err = c.sendMessage(context.Background(), recipientJID, msg)
 	if err != nil {
 		return fmt.Errorf("failed to send audio message: %w", err)
 	}
@@ -249,6 +290,33 @@ func (c *Client) GetAllContacts() (map[types.JID]types.ContactInfo, error) {
 
 func (c *Client) Download(msg whatsmeow.DownloadableMessage) ([]byte, error) {
 	return c.whatsmeowClient.Download(context.Background(), msg)
+}
+
+// DownloadToFile downloads and decrypts an attachment through a bounded file supplied by the caller.
+func (c *Client) DownloadToFile(ctx context.Context, msg whatsmeow.DownloadableMessage, file whatsmeow.File) error {
+	return c.whatsmeowClient.DownloadToFile(ctx, msg, file)
+}
+
+// ChatNames returns known contact and joined-group names for archive labeling.
+// Partial names are returned alongside errors so metadata lookup cannot stop capture.
+func (c *Client) ChatNames(ctx context.Context) (map[types.JID]string, error) {
+	names := make(map[types.JID]string)
+	contacts, contactErr := c.whatsmeowClient.Store.Contacts.GetAllContacts(ctx)
+	for jid, contact := range contacts {
+		name := contact.FullName
+		if name == "" {
+			name = contact.BusinessName
+		}
+		if name != "" {
+			names[jid.ToNonAD()] = name
+		}
+	}
+	groups, groupErr := c.whatsmeowClient.GetJoinedGroups(ctx)
+	for _, group := range groups {
+		names[group.JID.ToNonAD()] = group.Name
+	}
+	names[c.whatsmeowClient.Store.GetJID().ToNonAD()] = "Myself"
+	return names, errors.Join(contactErr, groupErr)
 }
 
 func (c *Client) Register() error {

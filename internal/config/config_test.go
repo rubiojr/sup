@@ -23,6 +23,57 @@ func TestLoadMissing(t *testing.T) {
 	if len(cfg.Allow.Users) != 0 {
 		t.Errorf("expected empty users, got %v", cfg.Allow.Users)
 	}
+	if cfg.Archive.Enabled || cfg.Archive.Scope != "all" || cfg.Archive.MaxPending != 1000 {
+		t.Errorf("unexpected archive defaults: %+v", cfg.Archive)
+	}
+}
+
+func TestArchiveConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name, settings string
+		wantErr        bool
+	}{
+		{"defaults", "", false},
+		{"direct only", `scope = "direct"`, false},
+		{"bad scope", `scope = "everyone"`, true},
+		{"unlimited file rejected", "max_file_bytes = 0", true},
+		{"bad media budget", "max_media_bytes = 1", true},
+		{"bad database budget", "max_db_bytes = 100", true},
+		{"unlimited queue rejected", "max_pending = 0", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "bot.toml")
+			if err := os.WriteFile(path, []byte("[archive]\nenabled = true\n"+tc.settings), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected archive validation error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !cfg.Archive.Enabled {
+				t.Fatal("archive should be enabled")
+			}
+			if len(cfg.Allow.Users) != 0 || len(cfg.Allow.Groups) != 0 {
+				t.Fatal("archive must not populate command allow-lists")
+			}
+			if err := Save(path, cfg); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if loaded.Archive != cfg.Archive {
+				t.Fatal("archive settings did not survive allow-list config save")
+			}
+		})
+	}
 }
 
 func TestLoadValid(t *testing.T) {

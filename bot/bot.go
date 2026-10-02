@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -23,6 +24,13 @@ import (
 
 const DefaultTrigger = ".sup"
 
+// MessageArchive is a passive sink with no bot authorization or sending capability.
+type MessageArchive interface {
+	Record(context.Context, *events.Message) error
+	SetChatNames(context.Context, map[types.JID]string) error
+	Run(context.Context) error
+}
+
 // Bot represents the WhatsApp bot instance
 type Bot struct {
 	registry        handlers.Registry
@@ -34,10 +42,17 @@ type Bot struct {
 	allowedGroups   map[string]struct{}
 	allowedUsers    map[string]struct{}
 	allowedCommands []string
+	archive         MessageArchive
 }
 
 // Option is a function that configures the Bot
 type Option func(*Bot)
+
+// WithArchive captures messages independently of the command allow-list.
+// The caller owns the archive and closes it after Start returns.
+func WithArchive(archive MessageArchive) Option {
+	return func(b *Bot) { b.archive = archive }
+}
 
 // WithLogger sets a custom logger for the bot.
 // If not provided, the bot will use slog.Default().
@@ -216,16 +231,21 @@ func (b *Bot) RegisterHandler(handler handlers.Handler) error {
 // Start starts the event handler loop
 func (b *Bot) Start(ctx context.Context) error {
 	b.logger.Debug("Starting bot mode", "prefix", b.trigger)
+	parent := ctx
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	c, err := client.GetClient()
 	if err != nil {
 		return err
 	}
-	c.AddEventHandler(func(evt any) { b.eventHandler(evt, b.trigger) })
+	id := c.AddEventHandler(func(evt any) { b.eventHandler(ctx, evt, b.trigger) })
 	defer c.Disconnect()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer c.RemoveEventHandler(id)
+	archiveDone := b.startArchive(ctx, c)
+	if b.archive != nil {
+		defer c.SetSentMessageObserver(nil)
+	}
 
 	b.logger.Debug("Bot is now running and listening for commands")
 
@@ -234,12 +254,48 @@ func (b *Bot) Start(ctx context.Context) error {
 	}
 
 	select {
+	case err := <-archiveDone:
+		stop()
+		return err
 	case <-ctx.Done():
-		b.logger.Debug("Bot shutting down via context cancellation")
-		return ctx.Err()
-	case <-sigChan:
-		b.logger.Debug("Bot shutting down via signal")
+		var archiveErr error
+		if archiveDone != nil {
+			archiveErr = <-archiveDone
+		}
+		b.logger.Debug("Bot shutting down")
+		return errors.Join(parent.Err(), archiveErr)
+	}
+}
+
+func (b *Bot) startArchive(ctx context.Context, c *client.Client) <-chan error {
+	if b.archive == nil {
 		return nil
+	}
+	c.SetSentMessageObserver(func(msg *events.Message) { b.recordMessage(ctx, msg) })
+	lookupCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	names, err := c.ChatNames(lookupCtx)
+	cancel()
+	if err != nil {
+		b.logger.Warn("Archive chat-name lookup incomplete", "error", err)
+	}
+	storeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := b.archive.SetChatNames(storeCtx, names); err != nil {
+		b.logger.Warn("Archive chat-name update failed", "error", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- b.archive.Run(ctx) }()
+	return done
+}
+
+func (b *Bot) recordMessage(ctx context.Context, msg *events.Message) {
+	if b.archive == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := b.archive.Record(ctx, msg); err != nil {
+		b.logger.Error("Archiving message failed", "error", err)
 	}
 }
 
@@ -273,9 +329,10 @@ func (b *Bot) UnloadPlugins() error {
 }
 
 // eventHandler handles incoming WhatsApp events
-func (b *Bot) eventHandler(evt any, handlerPrefix string) {
+func (b *Bot) eventHandler(ctx context.Context, evt any, handlerPrefix string) {
 	switch v := evt.(type) {
 	case *events.Message:
+		b.recordMessage(ctx, v)
 		if b.ignoreAutoReply(v) {
 			return
 		}

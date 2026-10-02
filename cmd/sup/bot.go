@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -10,9 +11,12 @@ import (
 	"github.com/rubiojr/sup/bot"
 	bothandlers "github.com/rubiojr/sup/bot/handlers"
 	"github.com/rubiojr/sup/cmd/sup/handlers"
+	"github.com/rubiojr/sup/internal/archive"
 	"github.com/rubiojr/sup/internal/botfs"
+	"github.com/rubiojr/sup/internal/client"
 	"github.com/rubiojr/sup/internal/config"
 	"github.com/rubiojr/sup/internal/log"
+	"go.mau.fi/whatsmeow"
 )
 
 var configFlag = &cli.StringFlag{
@@ -73,7 +77,7 @@ var botAllowListCmd = &cli.Command{
 	},
 }
 
-func botRunCommand(ctx context.Context, cmd *cli.Command) error {
+func botRunCommand(ctx context.Context, cmd *cli.Command) (err error) {
 	configPath := cmd.String("config")
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -103,13 +107,22 @@ func botRunCommand(ctx context.Context, cmd *cli.Command) error {
 	}
 	logger := log.Default()
 
-	botInstance, err := bot.New(
+	opts := []bot.Option{
 		bot.WithLogger(logger),
 		bot.WithTrigger(t),
 		bot.WithAllowedGroups(cfg.Allow.GroupJIDs()),
 		bot.WithAllowedUsers(cfg.Allow.UserJIDs()),
 		bot.WithAllowedCommands(cfg.Plugins.AllowedCommands),
-	)
+	}
+	if cfg.Archive.Enabled {
+		a, openErr := archive.Open(ctx, cfg.Archive, archiveDownloader{})
+		if openErr != nil {
+			return fmt.Errorf("opening archive: %w", openErr)
+		}
+		defer func() { err = errors.Join(err, a.Close()) }()
+		opts = append(opts, bot.WithArchive(a))
+	}
+	botInstance, err := bot.New(opts...)
 	if err != nil {
 		return err
 	}
@@ -124,6 +137,17 @@ func botRunCommand(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	return botInstance.Start(ctx)
+}
+
+// The worker resolves the client only after Start has attached event listeners.
+type archiveDownloader struct{}
+
+func (archiveDownloader) DownloadToFile(ctx context.Context, msg whatsmeow.DownloadableMessage, file whatsmeow.File) error {
+	c, err := client.GetClient()
+	if err != nil {
+		return err
+	}
+	return c.DownloadToFile(ctx, msg, file)
 }
 
 func registerHandlers(b *bot.Bot, cfg *config.Config) error {

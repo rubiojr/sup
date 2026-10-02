@@ -7,6 +7,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
+	"github.com/rubiojr/sup/internal/archive"
 	"github.com/rubiojr/sup/internal/botfs"
 )
 
@@ -17,6 +18,7 @@ type Config struct {
 	Allow    Allow          `toml:"allow"`
 	Agendalo AgendaloConfig `toml:"agendalo"`
 	Plugins  PluginsConfig  `toml:"plugins"`
+	Archive  archive.Config `toml:"archive"`
 }
 
 // AgendaloConfig holds settings for the agendalo handler.
@@ -76,6 +78,7 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{
 		Trigger:  ".sup",
 		LogLevel: "info",
+		Archive:  archive.DefaultConfig(),
 	}
 
 	data, err := os.ReadFile(path)
@@ -88,6 +91,11 @@ func Load(path string) (*Config, error) {
 
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+	if cfg.Archive.Enabled {
+		if err := cfg.Archive.Validate(); err != nil {
+			return nil, err
+		}
 	}
 
 	return cfg, nil
