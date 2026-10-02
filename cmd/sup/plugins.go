@@ -194,12 +194,18 @@ func pluginRunAction(ctx context.Context, c *cli.Command) error {
 	}
 
 	storePath := filepath.Join(botfs.DataDir(), "store", "store.db")
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o750); err != nil {
+		return fmt.Errorf("creating plugin store directory: %w", err)
+	}
 	s, err := store.NewStore(storePath)
 	if err != nil {
 		return fmt.Errorf("failed to open store: %w", err)
 	}
 
 	cachePath := filepath.Join(botfs.DataDir(), "cache", "cache.db")
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o750); err != nil {
+		return fmt.Errorf("creating plugin cache directory: %w", err)
+	}
 	c2, err := cache.NewCache(cachePath)
 	if err != nil {
 		return fmt.Errorf("failed to open cache: %w", err)
@@ -209,6 +215,7 @@ func pluginRunAction(ctx context.Context, c *cli.Command) error {
 	if err != nil {
 		return fmt.Errorf("failed to load plugin: %w", err)
 	}
+	defer handler.Close()
 
 	if !handler.SupportsCLI() {
 		return fmt.Errorf("plugin '%s' does not support CLI commands", pluginName)

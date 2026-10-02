@@ -6,6 +6,10 @@ type MessageInfo struct {
 	Timestamp int64  `json:"timestamp"`
 	PushName  string `json:"push_name"`
 	IsGroup   bool   `json:"is_group"`
+	IsFromMe  bool   `json:"is_from_me"`
+	IsSelf    bool   `json:"is_self"`
+	// AutoReplyAllowed is set only by hosts enforcing auto-reply protections.
+	AutoReplyAllowed bool `json:"auto_reply_allowed"`
 }
 
 // Input represents the input data passed to a plugin

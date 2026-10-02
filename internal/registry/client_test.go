@@ -143,8 +143,7 @@ func TestDownloadPlugin(t *testing.T) {
 		},
 	}
 
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/index.json.gz":
 			indexJSON, _ := json.Marshal(index)

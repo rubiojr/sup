@@ -3,7 +3,10 @@ package bot
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"log/slog"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,6 +23,7 @@ import (
 func newTestBot(t *testing.T, opts ...Option) (*Bot, error) {
 	t.Helper()
 	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
 	c, err := cache.NewCache(filepath.Join(tmpDir, "cache.db"))
 	if err != nil {
 		return nil, err
@@ -195,6 +199,9 @@ func TestWildcardHandlerWithCommandMessage(t *testing.T) {
 	if !mockCommand.called {
 		t.Fatal("Command handler was not called")
 	}
+	if mockWildcard.calls != 1 {
+		t.Fatalf("Wildcard received command %d times, want 1", mockWildcard.calls)
+	}
 
 	// Create a regular message to test wildcard
 	regularMsg := createMockMessage("Hello world", "user@example.com")
@@ -204,6 +211,126 @@ func TestWildcardHandlerWithCommandMessage(t *testing.T) {
 	if !mockWildcard.called {
 		t.Fatal("Wildcard handler was not called for regular message")
 	}
+	if mockWildcard.calls != 2 {
+		t.Fatalf("Wildcard received %d messages, want 2", mockWildcard.calls)
+	}
+}
+
+func TestAutoReplyDoesNotExecuteCommands(t *testing.T) {
+	if _, err := exec.LookPath("tinygo"); err != nil {
+		t.Skip("tinygo required for WASM integration test")
+	}
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, "plugins")
+	if err := os.Mkdir(pluginDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), "tinygo", "build", "-target", "wasi", "-o", filepath.Join(pluginDir, "autoreply.wasm"), ".")
+	cmd.Dir = "../plugins/autoreply"
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build plugin: %v\n%s", err, output)
+	}
+	b, err := newTestBot(t, WithAllowedUsers([]string{"123@s.whatsapp.net"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pm := handlers.NewPluginManager(pluginDir, b.cache, b.store, nil)
+	if err := pm.LoadPlugins(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pm.UnloadAll() })
+	autoReply, ok := pm.GetPlugin("autoreply")
+	if !ok {
+		t.Fatal("autoreply failed to load")
+	}
+	b.pluginManager = pm
+	if err := b.registry.SetPluginManager(pm); err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := sql.Open("sqlite3", filepath.Join(dir, "autoreply.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ledger.Close() })
+	_, err = ledger.Exec(`INSERT INTO replies VALUES (?, ?, ?, ?, 0, 1)`, "original", "generated", "123@s.whatsapp.net", time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	command, wildcard := &mockHandler{}, &mockWildcardHandler{}
+	if err := b.RegisterHandler(command); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.RegisterHandler(wildcard); err != nil {
+		t.Fatal(err)
+	}
+	msg := createMockMessage(".sup test", "123")
+	msg.Info.IsFromMe = true
+	msg.Info.ID = "generated"
+	b.eventHandler(msg, ".sup")
+	if command.called || wildcard.called {
+		t.Fatal("auto-generated reply reached a handler")
+	}
+	msg.Info.ID = "manual-self-message"
+	b.eventHandler(msg, ".sup")
+	if !command.called || wildcard.calls != 1 {
+		t.Fatal("manual self-message should still reach both handlers once")
+	}
+
+	t.Run("auto-reply scope does not grant command access", func(t *testing.T) {
+		templatePath := filepath.Join(dir, "plugin-data", "autoreply", "reply.txt")
+		if err := os.WriteFile(templatePath, []byte("I'm away."), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{{"dry-run", "on"}, {"test-unlimited", "on"}, {"enable"}} {
+			if _, err := autoReply.HandleCLI(args); err != nil {
+				t.Fatal(err)
+			}
+		}
+		b.allowedGroups = map[string]struct{}{"123@g.us": {}}
+		for _, tc := range []struct {
+			name         string
+			scope        string
+			user         string
+			server       string
+			text         string
+			self         bool
+			wantReply    int
+			wantHandlers bool
+		}{
+			{"default blocks unlisted", "allow-list", "456", types.DefaultUserServer, ".sup test", false, 0, false},
+			{"all answers unlisted DM", "all", "456", types.DefaultUserServer, "hello", false, 1, false},
+			{"all answers unlisted LID command", "all", "789", types.HiddenUserServer, ".sup test", false, 1, false},
+			{"all excludes unlisted group", "all", "456", types.GroupServer, ".sup test", false, 0, false},
+			{"all excludes listed group", "all", "123", types.GroupServer, ".sup test", false, 0, true},
+			{"listed DM gets normal routing", "all", "123", types.DefaultUserServer, ".sup test", false, 1, true},
+			{"all answers unlisted self", "all", "999", types.DefaultUserServer, "hello", true, 1, false},
+			{"allow-list blocks unlisted self again", "allow-list", "999", types.DefaultUserServer, "hello", true, 0, false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				if _, err := autoReply.HandleCLI([]string{"scope", tc.scope}); err != nil {
+					t.Fatal(err)
+				}
+				command.called, wildcard.called, wildcard.calls = false, false, 0
+				msg := createMockMessage(tc.text, tc.user)
+				msg.Info.Chat.Server = tc.server
+				msg.Info.Sender = msg.Info.Chat
+				msg.Info.IsFromMe = tc.self
+				msg.Info.ID = tc.name
+				msg.Info.Timestamp = time.Now().Add(time.Second)
+				b.eventHandler(msg, ".sup")
+				var attempts int
+				if err := ledger.QueryRow("SELECT count(*) FROM replies WHERE incoming_id = ?", tc.name).Scan(&attempts); err != nil {
+					t.Fatal(err)
+				}
+				if attempts != tc.wantReply {
+					t.Errorf("auto-reply attempts = %d, want %d", attempts, tc.wantReply)
+				}
+				if command.called != tc.wantHandlers || wildcard.called != tc.wantHandlers {
+					t.Errorf("other handlers called: command=%t, wildcard=%t, want %t", command.called, wildcard.called, tc.wantHandlers)
+				}
+			})
+		}
+	})
 }
 
 func TestBotCache(t *testing.T) {
@@ -346,11 +473,13 @@ func TestBotCacheNotInitialized(t *testing.T) {
 // mockWildcardHandler is a mock implementation for testing wildcard functionality
 type mockWildcardHandler struct {
 	called          bool
+	calls           int
 	receivedMessage *events.Message
 }
 
 func (m *mockWildcardHandler) HandleMessage(msg *events.Message) error {
 	m.called = true
+	m.calls++
 	m.receivedMessage = msg
 	return nil
 }

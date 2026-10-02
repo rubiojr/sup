@@ -3,10 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 
 	extism "github.com/extism/go-sdk"
 	"github.com/rubiojr/sup/cache"
@@ -26,11 +29,13 @@ type CacheResponse struct {
 }
 
 type WasmHandler struct {
-	plugin  *extism.Plugin
-	name    string
-	help    HandlerHelp
-	dataDir string
-	root    *os.Root
+	mu        sync.Mutex
+	plugin    *extism.Plugin
+	name      string
+	help      HandlerHelp
+	dataDir   string
+	root      *os.Root
+	autoReply *autoReplyGuard
 }
 
 type WasmInput struct {
@@ -40,10 +45,13 @@ type WasmInput struct {
 }
 
 type WasmMessageInfo struct {
-	ID        string `json:"id"`
-	Timestamp int64  `json:"timestamp"`
-	PushName  string `json:"push_name"`
-	IsGroup   bool   `json:"is_group"`
+	ID               string `json:"id"`
+	Timestamp        int64  `json:"timestamp"`
+	PushName         string `json:"push_name"`
+	IsGroup          bool   `json:"is_group"`
+	IsFromMe         bool   `json:"is_from_me"`
+	IsSelf           bool   `json:"is_self"`
+	AutoReplyAllowed bool   `json:"auto_reply_allowed"`
 }
 
 type WasmOutput struct {
@@ -140,9 +148,11 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allow
 		cache:           cache,
 		store:           store,
 		allowedCommands: allowedCommands,
+		autoReply:       pluginName == "autoreply",
 	}
 	plugin, err := newExtismPlugin(ctx, wasmPath, hc.hostFunctions(), moduleConfig)
 	if err != nil {
+		_ = root.Close()
 		return nil, fmt.Errorf("failed to create WASM plugin from %s: %w", wasmPath, err)
 	}
 
@@ -156,7 +166,15 @@ func NewWasmHandler(wasmPath string, cache cache.Cache, store store.Store, allow
 	}
 
 	if err := handler.loadHelp(); err != nil {
+		_ = handler.Close()
 		return nil, fmt.Errorf("failed to load help for WASM plugin %s: %w", wasmPath, err)
+	}
+	if pluginName == "autoreply" {
+		handler.autoReply, err = newAutoReplyGuard(filepath.Join(pluginDir, "..", "autoreply.db"), store)
+		if err != nil {
+			_ = handler.Close()
+			return nil, err
+		}
 	}
 
 	return handler, nil
@@ -203,34 +221,36 @@ func stripExt(name string) string {
 }
 
 func (w *WasmHandler) HandleMessage(msg *events.Message) error {
-	// Extract command text from the message
-	var messageText string
-	if msg.Message.GetConversation() != "" {
-		messageText = msg.Message.GetConversation()
-	} else if msg.Message.GetExtendedTextMessage() != nil {
-		messageText = msg.Message.GetExtendedTextMessage().GetText()
-	}
+	return w.handleMessage(msg, true)
+}
 
-	var text string
-	// For wildcard handlers (name "*"), pass the full message text
-	if w.name == "*" {
-		text = messageText
-	} else {
-		// Extract command arguments (skip the command prefix and handler name)
-		parts := strings.Fields(messageText)
-		if len(parts) > 2 {
-			text = strings.Join(parts[2:], " ")
+// HandleUnlistedMessage delivers messages outside the bot allow-list only to
+// auto-reply. Its host guard checks scope before rendering and again at send time.
+func (w *WasmHandler) HandleUnlistedMessage(msg *events.Message) error {
+	if w.autoReply == nil {
+		return nil
+	}
+	return w.handleMessage(msg, false)
+}
+
+func (w *WasmHandler) handleMessage(msg *events.Message, allowListed bool) error {
+	if w.autoReply != nil {
+		eligible, err := w.autoReply.eligible(msg, allowListed)
+		if err != nil || !eligible {
+			return err
 		}
 	}
-
 	input := WasmInput{
-		Message: text,
+		Message: wasmMessageText(msg, w.Topics()),
 		Sender:  msg.Info.Chat.String(),
 		Info: WasmMessageInfo{
-			ID:        msg.Info.ID,
-			Timestamp: msg.Info.Timestamp.Unix(),
-			PushName:  msg.Info.PushName,
-			IsGroup:   msg.Info.Chat.Server == types.GroupServer,
+			ID:               msg.Info.ID,
+			Timestamp:        msg.Info.Timestamp.Unix(),
+			PushName:         msg.Info.PushName,
+			IsGroup:          msg.Info.Chat.Server == types.GroupServer,
+			IsFromMe:         msg.Info.IsFromMe,
+			IsSelf:           isSelfChat(msg),
+			AutoReplyAllowed: w.autoReply != nil,
 		},
 	}
 
@@ -239,7 +259,7 @@ func (w *WasmHandler) HandleMessage(msg *events.Message) error {
 		return fmt.Errorf("failed to marshal input for WASM plugin: %w", err)
 	}
 
-	exit, outputData, err := w.plugin.Call("handle_message", inputData)
+	exit, outputData, err := w.call("handle_message", inputData)
 	if err != nil {
 		return fmt.Errorf("WASM plugin call failed with exit code %d: %w", exit, err)
 	}
@@ -254,14 +274,33 @@ func (w *WasmHandler) HandleMessage(msg *events.Message) error {
 	}
 
 	if output.Reply != "" {
+		if w.autoReply != nil {
+			return w.autoReply.reply(msg, output.Reply, allowListed)
+		}
 		return w.sendReply(msg.Info.Chat, output.Reply)
 	}
 
 	return nil
 }
 
+func wasmMessageText(msg *events.Message, topics []string) string {
+	text := msg.Message.GetConversation()
+	if text == "" {
+		text = msg.Message.GetExtendedTextMessage().GetText()
+	}
+	// Topic subscriptions, not the plugin filename, determine wildcard input.
+	if slices.Contains(topics, "*") {
+		return text
+	}
+	parts := strings.Fields(text)
+	if len(parts) > 2 {
+		return strings.Join(parts[2:], " ")
+	}
+	return ""
+}
+
 func (w *WasmHandler) Name() string {
-	exit, outputData, err := w.plugin.Call("get_name", []byte{})
+	exit, outputData, err := w.call("get_name", []byte{})
 	if err != nil {
 		return w.name
 	}
@@ -272,7 +311,7 @@ func (w *WasmHandler) Name() string {
 }
 
 func (w *WasmHandler) Topics() []string {
-	exit, outputData, err := w.plugin.Call("get_topics", []byte{})
+	exit, outputData, err := w.call("get_topics", []byte{})
 	if err != nil {
 		// Fallback to plugin name for backward compatibility
 		return []string{w.name}
@@ -293,7 +332,7 @@ func (w *WasmHandler) GetHelp() HandlerHelp {
 }
 
 func (w *WasmHandler) loadHelp() error {
-	exit, outputData, err := w.plugin.Call("get_help", []byte{})
+	exit, outputData, err := w.call("get_help", []byte{})
 	if err != nil {
 		w.help = HandlerHelp{
 			Name:        w.name,
@@ -314,13 +353,7 @@ func (w *WasmHandler) loadHelp() error {
 		return fmt.Errorf("failed to unmarshal help output: %w", err)
 	}
 
-	w.help = HandlerHelp{
-		Name:        helpOutput.Name,
-		Description: helpOutput.Description,
-		Usage:       helpOutput.Usage,
-		Examples:    helpOutput.Examples,
-		Category:    helpOutput.Category,
-	}
+	w.help = HandlerHelp(helpOutput)
 
 	if w.help.Name == "" {
 		w.help.Name = w.name
@@ -338,24 +371,40 @@ func (w *WasmHandler) sendReply(recipient types.JID, message string) error {
 		return fmt.Errorf("error getting client: %w", err)
 	}
 
-	c.SendText(recipient, message)
-	return nil
+	return c.SendText(recipient, message)
 }
 
 func (w *WasmHandler) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var errs []error
 	if w.plugin != nil {
 		ctx := context.Background()
-		w.plugin.Close(ctx)
+		errs = append(errs, w.plugin.Close(ctx))
+		w.plugin = nil
 	}
 	if w.root != nil {
-		w.root.Close()
+		errs = append(errs, w.root.Close())
+		w.root = nil
 	}
-	return nil
+	if w.autoReply != nil {
+		errs = append(errs, w.autoReply.db.Close())
+	}
+	return errors.Join(errs...)
+}
+
+func (w *WasmHandler) call(name string, input []byte) (uint32, []byte, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.plugin == nil {
+		return 0, nil, fmt.Errorf("plugin is closed")
+	}
+	return w.plugin.Call(name, input)
 }
 
 // Version returns the version of the WASM plugin
 func (w *WasmHandler) Version() string {
-	exit, outputData, err := w.plugin.Call("get_version", []byte{})
+	exit, outputData, err := w.call("get_version", []byte{})
 	if err != nil {
 		return "unknown"
 	}
@@ -367,7 +416,9 @@ func (w *WasmHandler) Version() string {
 
 // SupportsCLI returns true if the plugin exports handle_cli.
 func (w *WasmHandler) SupportsCLI() bool {
-	return w.plugin.FunctionExists("handle_cli")
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.plugin != nil && w.plugin.FunctionExists("handle_cli")
 }
 
 // CLIInput matches the plugin CLIInput type.
@@ -390,7 +441,7 @@ func (w *WasmHandler) HandleCLI(args []string) (string, error) {
 		return "", fmt.Errorf("failed to marshal CLI input: %w", err)
 	}
 
-	exit, outputData, err := w.plugin.Call("handle_cli", inputData)
+	exit, outputData, err := w.call("handle_cli", inputData)
 	if err != nil {
 		return "", fmt.Errorf("plugin CLI call failed with exit code %d: %w", exit, err)
 	}

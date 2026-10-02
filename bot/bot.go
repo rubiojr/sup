@@ -276,7 +276,12 @@ func (b *Bot) UnloadPlugins() error {
 func (b *Bot) eventHandler(evt any, handlerPrefix string) {
 	switch v := evt.(type) {
 	case *events.Message:
+		if b.ignoreAutoReply(v) {
+			return
+		}
 		isGroup := v.Info.Chat.Server == types.GroupServer
+		allowed := b.isAllowed(v.Info.Chat.String(), isGroup)
+		commandHandled := false
 
 		if loc := v.Message.GetLocationMessage(); loc != nil {
 			fmt.Printf("Accuracy: %d\n", loc.AccuracyInMeters)
@@ -292,16 +297,19 @@ func (b *Bot) eventHandler(evt any, handlerPrefix string) {
 			}
 
 			if strings.HasPrefix(messageText, handlerPrefix) {
-				if !b.isAllowed(v.Info.Chat.String(), isGroup) {
+				if !allowed {
 					b.logger.Warn("Command from non-allowed source ignored",
 						"jid", v.Info.Chat.String(),
 						"is_group", isGroup)
 				} else {
 					b.handleCommand(v, handlerPrefix)
+					commandHandled = true
 				}
 			}
 		}
-		if b.isAllowed(v.Info.Chat.String(), isGroup) {
+		if !allowed {
+			b.handleUnlistedMessage(v)
+		} else if !commandHandled {
 			b.handleRegularMessage(v)
 		}
 
@@ -313,6 +321,34 @@ func (b *Bot) eventHandler(evt any, handlerPrefix string) {
 				"phone", v.Info.Chat.User)
 		}
 	}
+}
+
+func (b *Bot) handleUnlistedMessage(msg *events.Message) {
+	if b.pluginManager == nil {
+		return
+	}
+	for _, p := range b.pluginManager.GetAllPlugins() {
+		if err := p.HandleUnlistedMessage(msg); err != nil {
+			b.logger.Error("Error handling unlisted message", "error", err)
+		}
+	}
+}
+
+func (b *Bot) ignoreAutoReply(msg *events.Message) bool {
+	if !msg.Info.IsFromMe || b.pluginManager == nil {
+		return false
+	}
+	for _, p := range b.pluginManager.GetAllPlugins() {
+		generated, err := p.IsAutoReply(msg.Info.ID)
+		if err != nil {
+			b.logger.Error("Checking auto-reply origin failed", "error", err)
+			return true
+		}
+		if generated {
+			return true
+		}
+	}
+	return false
 }
 
 // handleCommand processes a command message and routes it to subscribed handlers

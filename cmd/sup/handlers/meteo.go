@@ -86,7 +86,7 @@ func (h *MeteoHandler) HandleMessage(msg *events.Message) error {
 }
 
 func (h *MeteoHandler) forecastFromCache(cityName string) *aemet.Municipality {
-	cacheKey := fmt.Sprintf("%s", strings.ToLower(cityName))
+	cacheKey := strings.ToLower(cityName)
 
 	data, err := h.cache.Get([]byte(cacheKey))
 	if err != nil {
@@ -103,7 +103,7 @@ func (h *MeteoHandler) forecastFromCache(cityName string) *aemet.Municipality {
 }
 
 func (h *MeteoHandler) cacheForecast(cityName string, f *aemet.Municipality) {
-	cacheKey := fmt.Sprintf("%s", strings.ToLower(cityName))
+	cacheKey := strings.ToLower(cityName)
 
 	data, err := json.Marshal(f)
 	if err != nil {

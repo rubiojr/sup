@@ -126,6 +126,17 @@ func (c *Client) SendText(recipientJID types.JID, message string) error {
 	return nil
 }
 
+// SendTextWithID sends text using an ID reserved by the caller before delivery.
+func (c *Client) SendTextWithID(ctx context.Context, recipient types.JID, message, id string) error {
+	_, err := c.whatsmeowClient.SendMessage(ctx, recipient, &waE2E.Message{
+		Conversation: proto.String(message),
+	}, whatsmeow.SendRequestExtra{ID: id})
+	if err != nil {
+		return fmt.Errorf("sending message: %w", err)
+	}
+	return nil
+}
+
 func (c *Client) SendFile(recipientJID types.JID, filePath string) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {

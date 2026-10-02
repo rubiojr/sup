@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +30,7 @@ type hostContext struct {
 	store           store.Store
 	allowedCommands []string
 	noop            bool
+	autoReply       bool
 }
 
 // hostFunctions returns all host functions wired to this context.
@@ -95,7 +97,7 @@ func (hc *hostContext) readFileFunc() extism.HostFunction {
 				return
 			}
 
-			data, err := hc.root.ReadFile(cleanPluginPath(requestedPath))
+			data, err := hc.readFile(cleanPluginPath(requestedPath))
 			if err != nil {
 				log.Warn("Plugin file read failed", "requested_path", requestedPath, "data_dir", hc.dataDir, "error", err)
 				writeString(p, stack, "")
@@ -113,12 +115,36 @@ func (hc *hostContext) readFileFunc() extism.HostFunction {
 	)
 }
 
+func (hc *hostContext) readFile(path string) ([]byte, error) {
+	if !hc.autoReply {
+		return hc.root.ReadFile(path)
+	}
+	f, err := hc.root.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, autoReplyMaxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > autoReplyMaxBytes {
+		return nil, fmt.Errorf("auto-reply file exceeds %d bytes", autoReplyMaxBytes)
+	}
+	return data, nil
+}
+
 // --- send_image -------------------------------------------------------------
 
 func (hc *hostContext) sendImageFunc() extism.HostFunction {
 	return extism.NewHostFunctionWithStack(
 		"send_image",
 		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			// Auto-reply can only send text through the guarded reply path.
+			if hc.autoReply {
+				stack[0] = extism.EncodeU32(1)
+				return
+			}
 			requestData, err := hc.readBytes(p, stack)
 			if err != nil {
 				stack[0] = extism.EncodeU32(1)
@@ -427,6 +453,10 @@ func (hc *hostContext) execCommandFunc() extism.HostFunction {
 	return extism.NewHostFunctionWithStack(
 		"exec_command",
 		func(ctx context.Context, p *extism.CurrentPlugin, stack []uint64) {
+			if hc.autoReply {
+				writeJSON(p, stack, ExecCommandResponse{Success: false, Error: "exec_command is not available to autoreply"})
+				return
+			}
 			if hc.noop {
 				writeJSON(p, stack, ExecCommandResponse{Success: false, Error: "exec_command not available in temp plugin"})
 				return

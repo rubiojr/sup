@@ -15,7 +15,7 @@ func (h *PingHandler) HandleMessage(msg *events.Message) error {
 	fmt.Printf("Ping command received from %s\n", msg.Info.Chat.String())
 	c, err := client.GetClient()
 	if err != nil {
-		return fmt.Errorf("Error getting client: %w", err)
+		return fmt.Errorf("error getting client: %w", err)
 	}
 
 	c.SendText(msg.Info.Chat, "pong")

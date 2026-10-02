@@ -1,5 +1,7 @@
 # Sup Bot Mode
 
+For template replies to incoming direct messages, see [Auto-reply](AUTOREPLY.md).
+
 Start bot mode to listen for messages and run command handlers:
 
 ```bash

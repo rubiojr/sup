@@ -143,11 +143,7 @@ func (f *FileDownloaderHandler) isSupportedFileType(mimeType string) bool {
 		}
 	}
 
-	if strings.HasPrefix(mimeType, "text/") {
-		return true
-	}
-
-	return false
+	return strings.HasPrefix(mimeType, "text/")
 }
 
 func (f *FileDownloaderHandler) createFilename(msg *events.Message, fileType, ext string) string {

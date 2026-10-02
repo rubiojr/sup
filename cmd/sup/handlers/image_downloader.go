@@ -3,12 +3,9 @@ package handlers
 import (
 	"crypto/sha256"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"go.mau.fi/whatsmeow/types/events"
 
@@ -395,39 +392,6 @@ func (i *ImageDownloaderHandler) getUniqueFilepath(dir, filename string, content
 		// Different content, try next counter
 		counter++
 	}
-}
-
-func (i *ImageDownloaderHandler) downloadFromURL(url, filename string) error {
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	// Get the image
-	resp, err := client.Get(url)
-	if err != nil {
-		return fmt.Errorf("failed to download from URL %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-
-	// Create the file
-	out, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("failed to create file %s: %w", filename, err)
-	}
-	defer out.Close()
-
-	// Copy data
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to save file %s: %w", filename, err)
-	}
-
-	return nil
 }
 
 func (i *ImageDownloaderHandler) GetStats() (int, string) {
