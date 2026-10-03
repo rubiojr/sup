@@ -23,7 +23,7 @@ func TestLoadMissing(t *testing.T) {
 	if len(cfg.Allow.Users) != 0 {
 		t.Errorf("expected empty users, got %v", cfg.Allow.Users)
 	}
-	if cfg.Archive.Enabled || cfg.Archive.Scope != "all" || cfg.Archive.MaxPending != 1000 {
+	if cfg.Archive.Enabled || cfg.Archive.Scope != "all" {
 		t.Errorf("unexpected archive defaults: %+v", cfg.Archive)
 	}
 }
@@ -36,10 +36,7 @@ func TestArchiveConfig(t *testing.T) {
 		{"defaults", "", false},
 		{"direct only", `scope = "direct"`, false},
 		{"bad scope", `scope = "everyone"`, true},
-		{"unlimited file rejected", "max_file_bytes = 0", true},
-		{"bad media budget", "max_media_bytes = 1", true},
-		{"bad database budget", "max_db_bytes = 100", true},
-		{"unlimited queue rejected", "max_pending = 0", true},
+		{"legacy caps ignored", "max_file_bytes = 0\nmax_media_bytes = 1\nmax_db_bytes = 100\nmax_pending = 1", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "bot.toml")

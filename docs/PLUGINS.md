@@ -1,6 +1,6 @@
 # WASM Plugin Support
 
-Sup now supports WASM plugins using [Extism](https://extism.org/), allowing users to write handlers in multiple programming languages that run in a secure sandboxed environment.
+Sup supports WASM plugins using [Extism](https://extism.org/), allowing users to write handlers in multiple programming languages that run in a secure sandboxed environment.
 
 ## Overview
 

@@ -13,11 +13,7 @@ import (
 	"time"
 
 	"github.com/rubiojr/sup/internal/log"
-	"go.mau.fi/whatsmeow"
 )
-
-var errFileLimit = errors.New("archive file size limit exceeded")
-var errMediaLimit = errors.New("archive media storage limit exceeded")
 
 // Run processes the durable download queue with one worker. Cancellation leaves
 // pending jobs on disk and interrupts the current download. It never sends replies.
@@ -56,8 +52,11 @@ func (a *Archive) Run(ctx context.Context) error {
 
 func (a *Archive) processJob(ctx context.Context, job *downloadJob) error {
 	// A crash may leave a complete file between the atomic rename and DB update.
-	if size, hash, ok := a.recoverDownload(job); ok {
+	if size, hash, ok := a.recoverDownload(ctx, job); ok {
 		return a.finishJob(job, "ready", "", size, hash)
+	}
+	if ctx.Err() != nil {
+		return a.finishJob(job, "retry", "interrupted", 0, "")
 	}
 	if job.attempts > 3 {
 		if err := a.removePartial(job.path + ".part"); err != nil {
@@ -73,10 +72,6 @@ func (a *Archive) processJob(ctx context.Context, job *downloadJob) error {
 	}
 	state, reason := "retry", "download_failed"
 	switch {
-	case errors.Is(err, errFileLimit):
-		state, reason = "skipped", "file_size_limit"
-	case errors.Is(err, errMediaLimit):
-		state, reason = "skipped", "media_storage_limit"
 	case errors.Is(err, context.Canceled):
 		reason = "interrupted"
 	case job.attempts >= 3:
@@ -87,18 +82,18 @@ func (a *Archive) processJob(ctx context.Context, job *downloadJob) error {
 	return a.finishJob(job, state, reason, 0, "")
 }
 
-func (a *Archive) recoverDownload(job *downloadJob) (int64, string, bool) {
+func (a *Archive) recoverDownload(ctx context.Context, job *downloadJob) (int64, string, bool) {
 	f, err := a.root.Open(job.path)
 	if err != nil {
 		return 0, "", false
 	}
 	defer f.Close()
 	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > a.cfg.MaxFileBytes {
+	if err != nil || !info.Mode().IsRegular() {
 		return 0, "", false
 	}
 	hasher := sha256.New()
-	if _, err := io.Copy(hasher, io.LimitReader(f, a.cfg.MaxFileBytes+1)); err != nil {
+	if _, err := io.Copy(hasher, contextReader{ctx: ctx, reader: f}); err != nil {
 		return 0, "", false
 	}
 	hash := hasher.Sum(nil)
@@ -122,7 +117,6 @@ func (a *Archive) removePartial(path string) error {
 	if err := a.root.Remove(path); err != nil {
 		return err
 	}
-	a.mediaBytes -= info.Size()
 	return nil
 }
 
@@ -134,11 +128,6 @@ func (a *Archive) download(ctx context.Context, job *downloadJob) (size int64, h
 			return 0, "", err
 		}
 	}
-	remaining := a.cfg.MaxMediaBytes - a.mediaBytes
-	if remaining <= 32 {
-		return 0, "", errMediaLimit
-	}
-	limit := min(a.cfg.MaxFileBytes+32, remaining)
 	if err := a.root.MkdirAll(filepath.Dir(job.path), 0o700); err != nil {
 		return 0, "", err
 	}
@@ -149,35 +138,23 @@ func (a *Archive) download(ctx context.Context, job *downloadJob) (size int64, h
 	defer func() {
 		_ = f.Close()
 		if err != nil {
-			// Failed cleanup must stay charged against the media budget.
-			info, statErr := a.root.Stat(part)
 			if removeErr := a.root.Remove(part); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-				if statErr == nil {
-					a.mediaBytes += info.Size()
-				}
 				err = errors.Join(err, removeErr)
 			}
 		}
 	}()
-	bounded := &limitedFile{file: f, limit: limit}
-	if err := a.downloader.DownloadToFile(ctx, &job.descriptor, bounded); err != nil {
-		if errors.Is(err, errFileLimit) && limit < a.cfg.MaxFileBytes+32 {
-			return 0, "", errMediaLimit
-		}
+	if err := a.downloader.DownloadToFile(ctx, &job.descriptor, f); err != nil {
 		return 0, "", err
 	}
 	info, err := f.Stat()
 	if err != nil {
 		return 0, "", err
 	}
-	if info.Size() > a.cfg.MaxFileBytes {
-		return 0, "", errFileLimit
-	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return 0, "", err
 	}
 	hasher := sha256.New()
-	if _, err := io.Copy(hasher, f); err != nil {
+	if _, err := io.Copy(hasher, contextReader{ctx: ctx, reader: f}); err != nil {
 		return 0, "", err
 	}
 	if err := f.Sync(); err != nil {
@@ -189,48 +166,18 @@ func (a *Archive) download(ctx context.Context, job *downloadJob) (size int64, h
 	if err := a.root.Rename(part, job.path); err != nil {
 		return 0, "", err
 	}
-	a.mediaBytes += info.Size()
 	return info.Size(), hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// Do not embed *os.File: promoted ReadFrom methods would bypass Write's bound.
-type limitedFile struct {
-	file  *os.File
-	limit int64
+// Hashing large files uses constant memory and can be interrupted on shutdown.
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
 }
 
-var _ whatsmeow.File = (*limitedFile)(nil)
-
-func (f *limitedFile) Read(p []byte) (int, error)              { return f.file.Read(p) }
-func (f *limitedFile) ReadAt(p []byte, off int64) (int, error) { return f.file.ReadAt(p, off) }
-func (f *limitedFile) Stat() (os.FileInfo, error)              { return f.file.Stat() }
-
-func (f *limitedFile) Write(p []byte) (int, error) {
-	off, err := f.file.Seek(0, io.SeekCurrent)
-	if err != nil {
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
-	if off < 0 || off > f.limit || int64(len(p)) > f.limit-off {
-		return 0, errFileLimit
-	}
-	return f.file.Write(p)
-}
-
-func (f *limitedFile) WriteAt(p []byte, off int64) (int, error) {
-	if off < 0 || off > f.limit || int64(len(p)) > f.limit-off {
-		return 0, errFileLimit
-	}
-	return f.file.WriteAt(p, off)
-}
-
-func (f *limitedFile) Truncate(size int64) error {
-	if size < 0 || size > f.limit {
-		return errFileLimit
-	}
-	return f.file.Truncate(size)
-}
-
-func (f *limitedFile) Seek(off int64, whence int) (int64, error) {
-	// Reads may seek beyond EOF; writes and truncation enforce the actual bound.
-	return f.file.Seek(off, whence)
+	return r.reader.Read(p)
 }

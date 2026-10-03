@@ -13,25 +13,14 @@ import (
 )
 
 func (a *Archive) initSchema(ctx context.Context) error {
-	var version, pageSize, pages int64
-	for pragma, dest := range map[string]*int64{"user_version": &version, "page_size": &pageSize, "page_count": &pages} {
-		if err := a.db.QueryRowContext(ctx, "PRAGMA "+pragma).Scan(dest); err != nil {
-			return err
-		}
+	var version int64
+	if err := a.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return err
 	}
 	if version > 1 {
 		return fmt.Errorf("unsupported archive schema version %d", version)
 	}
-	if pageSize != 4096 {
-		return fmt.Errorf("unsupported archive page size %d", pageSize)
-	}
-	if pages*pageSize > a.cfg.MaxDBBytes {
-		return errors.New("archive database already exceeds max_db_bytes")
-	}
 	if _, err := a.db.ExecContext(ctx, "PRAGMA journal_mode=DELETE"); err != nil {
-		return err
-	}
-	if _, err := a.db.ExecContext(ctx, "PRAGMA max_page_count="+strconv.FormatInt(a.cfg.MaxDBBytes/pageSize, 10)); err != nil {
 		return err
 	}
 	_, err := a.db.ExecContext(ctx, `
@@ -57,6 +46,8 @@ func (a *Archive) initSchema(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS attachments_pending ON attachments(state, next_attempt);
 		PRAGMA user_version=1;
 		UPDATE attachments SET state='pending', next_attempt=0 WHERE state='downloading';
+		UPDATE attachments SET state='pending', attempts=0, next_attempt=0, last_error=''
+		WHERE state='skipped' AND last_error IN ('file_size_limit', 'media_storage_limit', 'queue_full');
 	`)
 	return err
 }
@@ -84,25 +75,9 @@ func (a *Archive) Record(ctx context.Context, event *events.Message) error {
 	if err := insertMessage(ctx, tx, rec); err != nil {
 		return err
 	}
-	var pending int
-	if len(media) != 0 {
-		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM attachments WHERE state IN ('pending','retry','downloading')").Scan(&pending); err != nil {
-			return err
-		}
-	}
 	for index, item := range media {
-		state, reason := "pending", ""
-		switch {
-		case item.size > uint64(a.cfg.MaxFileBytes):
-			state, reason = "skipped", "file_size_limit"
-		case pending >= a.cfg.MaxPending:
-			state, reason = "skipped", "queue_full"
-		}
-		if err := insertAttachment(ctx, tx, rec, item, index, state, reason); err != nil {
+		if err := insertAttachment(ctx, tx, rec, item, index); err != nil {
 			return err
-		}
-		if state == "pending" {
-			pending++
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -130,7 +105,7 @@ func insertMessage(ctx context.Context, tx *sql.Tx, rec messageRecord) error {
 	return err
 }
 
-func insertAttachment(ctx context.Context, tx *sql.Tx, rec messageRecord, item mediaItem, index int, state, reason string) error {
+func insertAttachment(ctx context.Context, tx *sql.Tx, rec messageRecord, item mediaItem, index int) error {
 	key := digest(rec.key + "/" + strconv.Itoa(index))
 	path := "chats/" + digest(rec.chat) + "/media/" + key + mediaExtension(item.kind, item.mime)
 	descriptor, err := json.Marshal(item.descriptor)
@@ -138,9 +113,9 @@ func insertAttachment(ctx context.Context, tx *sql.Tx, rec messageRecord, item m
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO attachments
-		(key, message_key, kind, mime_type, original_name, declared_size, path, descriptor, state, last_error)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(key) DO NOTHING`,
-		key, rec.key, item.kind, item.mime, item.name, strconv.FormatUint(item.size, 10), path, descriptor, state, reason)
+		(key, message_key, kind, mime_type, original_name, declared_size, path, descriptor, state)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending') ON CONFLICT(key) DO NOTHING`,
+		key, rec.key, item.kind, item.mime, item.name, strconv.FormatUint(item.size, 10), path, descriptor)
 	return err
 }
 

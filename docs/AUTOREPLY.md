@@ -6,7 +6,7 @@ updates, and channels never receive auto-replies.
 
 ## Setup
 
-Build an updated Sup binary and install the plugins:
+Build Sup and install the plugins:
 
 ```sh
 go install ./cmd/sup
@@ -14,9 +14,8 @@ script/install-plugins
 sup plugins run autoreply status
 ```
 
-The plugin must be installed as `autoreply.wasm`. It starts disabled and requires
-the updated host's send protections. The `status` command also creates its data
-directory on first use.
+The plugin must be installed as `autoreply.wasm`. It starts disabled. The `status`
+command creates its data directory on first use.
 
 Create `~/.local/share/sup/plugin-data/autoreply/reply.txt` containing your reply:
 
@@ -46,7 +45,7 @@ Auto-reply has its own recipient scope:
 - **`all`** answers incoming direct messages from anyone, including people you
   haven't added as contacts. Your self-chat works too, without an allow-list entry.
 - **`allow-list`** answers only chats listed in the bot's `allow.users` settings.
-  This is the default, including for existing configurations after upgrading.
+  This is the default.
 
 Change it at any time without restarting the bot:
 
@@ -55,8 +54,8 @@ sup plugins run autoreply scope all
 sup plugins run autoreply scope allow-list
 ```
 
-Both modes retain cooldowns, host safety caps, and the group exclusion. The
-bot's allow-list still controls access to commands and other handlers. A message
+Cooldowns, host safety caps, and the group exclusion apply in both modes. The
+bot's allow-list controls access to commands and other handlers. A message
 from an unlisted person can trigger only the auto-reply, even if it starts with
 `.sup`.
 

@@ -6,7 +6,7 @@ of bot command permissions. You can archive everyone's messages while leaving
 
 ## Enable
 
-Build the updated host with `go install ./cmd/sup`. In
+Build and install Sup with `go install ./cmd/sup`. In
 `~/.config/sup/bot.toml`, set:
 
 ```toml
@@ -22,9 +22,8 @@ addressed to broadcast JIDs, and channels aren't archived.
 
 The archive only records data and downloads attachments. It doesn't reply, mark
 messages read, execute commands, dispatch plugins, or grant anyone bot access.
-The bot's other features retain their own rules. In particular, auto-reply can
-independently use `scope all`, and existing download handlers still operate in
-allow-listed chats.
+Bot commands and plugins use the bot's allow-list. Auto-reply follows its own
+configured scope. The built-in download handlers process allow-listed chats.
 
 ## What's stored
 
@@ -74,42 +73,39 @@ to the archive directory. `attachments.message_key` joins to `messages.key`;
 `messages.chat_jid` joins to `chats.jid`.
 
 Attachments remain opaque bytes. Sup doesn't open, render, extract, or execute
-them. Downloads use WhatsApp's attachment API, with integrity checking and
-decryption, and an `os.Root`-confined, size-limited temporary file. A complete
+them. Downloads stream through WhatsApp's attachment API, with integrity checking
+and decryption, into an `os.Root`-confined temporary file. A complete
 file is renamed into place only after successful download.
 
-## Limits and retries
+Available disk space and the filesystem/SQLite limits determine archive capacity.
 
-These are the defaults; all limits must remain positive:
+The archive configuration is:
 
 ```toml
 [archive]
 enabled = true
 scope = "all"
 # dir = "/absolute/path/to/archive"
-max_file_bytes = 67108864       # 64 MiB per attachment
-max_media_bytes = 10737418240   # 10 GiB, including in-progress media files
-max_db_bytes = 268435456       # 256 MiB for message metadata and queued descriptors
-max_pending = 1000
 ```
 
+## Concurrency and retries
+
 The archive has one download worker. Pending jobs and retry state live in SQLite,
-so they survive restarts. Network failures get up to three archive-level attempts
+and only one job is loaded at a time, so backlog growth doesn't fill an in-memory
+queue. Attachments are streamed and hashed with fixed-size buffers. Shutdown can
+interrupt both downloading and hashing large files.
+
+Network failures get up to three archive-level attempts
 with increasing delays; WhatsApp's downloader may also retry requests within an
 attempt. Each attempt has a two-minute deadline. Shutdown cancels the active
 download and preserves retry state. Only one process can own an archive directory.
 
-The file cap is enforced on actual writes, even when the sender advertises a
-smaller size. Up to 32 bytes of encryption overhead are allowed while downloading,
-within the media budget. Database growth is capped independently. Allow for small
-SQLite lock/journal and filesystem overhead in addition to the two configured
-budgets. Each message snapshot is limited to 1 MiB.
+Message snapshots are limited to 1 MiB to bound per-message memory use; this is
+independent of attachment size.
 
 The archive doesn't delete old conversations or media to make space. Attachment
-states are `pending`, `downloading`, `retry`, `ready`, `skipped`, or `failed`.
-Oversized files, exhausted media storage, and a full pending queue are recorded
-as `skipped`, with a reason in `last_error`. Skipped jobs aren't automatically
-requeued. Once the database itself is full, new records fail and the bot logs the
-error; a download-worker storage failure stops the bot. Increase limits and
-restart to resume capture. Existing files count toward the media budget after
-restart.
+states are `pending`, `downloading`, `retry`, `ready`, or `failed`, with failure
+categories in `last_error`. Real I/O failures, such as a full disk, follow the
+retry path. If new database records cannot be written, the bot logs the error;
+a download-worker database failure stops the bot. Free disk space and restart
+to resume capture.

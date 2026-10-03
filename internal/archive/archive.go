@@ -5,11 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,12 +37,12 @@ type Archive struct {
 	running    atomic.Bool
 	mu         sync.RWMutex
 	closed     bool
-	mediaBytes int64 // Owned by the single download worker.
 	now        func() time.Time
 }
 
 // Open initializes an archive without starting workers or connecting to WhatsApp.
-// A separate SQLite write lock prevents concurrent processes from exceeding quotas.
+// A separate SQLite write lock keeps processes from claiming the same download
+// or replacing each other's temporary files.
 func Open(ctx context.Context, cfg Config, downloader Downloader) (_ *Archive, err error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -100,26 +98,6 @@ func Open(ctx context.Context, cfg Config, downloader Downloader) (_ *Archive, e
 	if err = root.MkdirAll("chats", 0o700); err != nil {
 		return nil, err
 	}
-	err = fs.WalkDir(root.FS(), "chats", func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("archive contains a non-regular file: %s", path)
-		}
-		a.mediaBytes += info.Size()
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("measuring archive media: %w", err)
-	}
 	return a, nil
 }
 
@@ -133,12 +111,7 @@ func (a *Archive) openDB(name string) (*sql.DB, error) {
 		return nil, err
 	}
 	u := url.URL{Scheme: "file", Path: filepath.Join(a.root.Name(), name)}
-	pragmas := []string{"busy_timeout(5000)", "foreign_keys(1)"}
-	if name == "archive.db" {
-		// Apply the cap to replacement connections as well as the first one.
-		pragmas = append(pragmas, "max_page_count("+strconv.FormatInt(a.cfg.MaxDBBytes/4096, 10)+")")
-	}
-	u.RawQuery = url.Values{"_pragma": pragmas}.Encode()
+	u.RawQuery = url.Values{"_pragma": {"busy_timeout(5000)", "foreign_keys(1)"}}.Encode()
 	db, err := sql.Open("sqlite3", u.String())
 	if err != nil {
 		return nil, err

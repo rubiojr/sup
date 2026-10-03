@@ -5,11 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -98,7 +100,6 @@ func TestArchiveConversationAndAttachments(t *testing.T) {
 	stored, err := a.root.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, data, stored)
-	assert.Equal(t, int64(len(data)), a.mediaBytes)
 	require.NoError(t, a.Record(t.Context(), event))
 	next, err := a.nextJob(t.Context())
 	require.NoError(t, err)
@@ -160,67 +161,114 @@ func TestArchiveScopeAndIdentity(t *testing.T) {
 	})
 }
 
-func TestArchiveBounds(t *testing.T) {
-	t.Run("pending queue", func(t *testing.T) {
-		cfg := archiveConfig(t)
-		cfg.MaxPending = 1
-		a := openTestArchive(t, cfg, []byte("x"))
-		require.NoError(t, a.Record(t.Context(), documentEvent("one", "1.pdf", []byte("x"))))
-		require.NoError(t, a.Record(t.Context(), documentEvent("two", "2.pdf", []byte("x"))))
+func TestArchiveUnrestrictedStorage(t *testing.T) {
+	t.Run("durable queue beyond former backlog cap", func(t *testing.T) {
+		a := openTestArchive(t, archiveConfig(t), []byte("x"))
+		for i := range 1001 {
+			require.NoError(t, a.Record(t.Context(), documentEvent(fmt.Sprintf("queued-%d", i), "file", []byte("x"))))
+		}
 		var queued, skipped int
 		require.NoError(t, a.db.QueryRow("SELECT count(*) FROM attachments WHERE state='pending'").Scan(&queued))
-		require.NoError(t, a.db.QueryRow("SELECT count(*) FROM attachments WHERE last_error='queue_full'").Scan(&skipped))
-		assert.Equal(t, 1, queued)
-		assert.Equal(t, 1, skipped)
+		require.NoError(t, a.db.QueryRow("SELECT count(*) FROM attachments WHERE state='skipped'").Scan(&skipped))
+		assert.Equal(t, 1001, queued)
+		assert.Zero(t, skipped)
 	})
-	t.Run("actual bytes override advertised size", func(t *testing.T) {
-		cfg := archiveConfig(t)
-		cfg.MaxFileBytes = 8
-		a := openTestArchive(t, cfg, bytes.Repeat([]byte("x"), 100))
-		require.NoError(t, a.Record(t.Context(), documentEvent("lie", "file.pdf", []byte("x"))))
+	t.Run("stream beyond former file-size cap", func(t *testing.T) {
+		const size = int64(65 << 20)
+		hasher := sha256.New()
+		_, err := io.CopyN(hasher, zeroReader{}, size)
+		require.NoError(t, err)
+		a := openTestArchive(t, archiveConfig(t), nil)
+		a.downloader = downloadFunc(func(_ context.Context, _ whatsmeow.DownloadableMessage, file whatsmeow.File) error {
+			_, err := io.CopyN(file, zeroReader{}, size)
+			return err
+		})
+		event := documentEvent("large-file", "large.pdf", nil)
+		event.Message.DocumentMessage.FileLength = proto.Uint64(uint64(size))
+		event.Message.DocumentMessage.FileSHA256 = hasher.Sum(nil)
+		require.NoError(t, a.Record(t.Context(), event))
 		job := runNext(t, a)
-		var state, reason string
-		require.NoError(t, a.db.QueryRow("SELECT state, last_error FROM attachments").Scan(&state, &reason))
-		assert.Equal(t, "skipped", state)
-		assert.Equal(t, "file_size_limit", reason)
-		assert.NoFileExists(t, filepath.Join(cfg.Dir, job.path))
-		assert.NoFileExists(t, filepath.Join(cfg.Dir, job.path+".part"))
-		assert.Zero(t, a.mediaBytes)
+		var state string
+		var storedSize int64
+		require.NoError(t, a.db.QueryRow("SELECT state, size_bytes FROM attachments").Scan(&state, &storedSize))
+		assert.Equal(t, "ready", state)
+		assert.Equal(t, size, storedSize)
+		info, err := a.root.Stat(job.path)
+		require.NoError(t, err)
+		assert.Equal(t, size, info.Size())
 	})
-	t.Run("media quota", func(t *testing.T) {
-		cfg := archiveConfig(t)
-		cfg.MaxFileBytes, cfg.MaxMediaBytes = 64, 128
-		data := bytes.Repeat([]byte("x"), 64)
-		a := openTestArchive(t, cfg, data)
-		for _, id := range []string{"one", "two", "three"} {
-			require.NoError(t, a.Record(t.Context(), documentEvent(id, id, data)))
-			runNext(t, a)
-		}
-		var ready, skipped int
-		require.NoError(t, a.db.QueryRow("SELECT count(*) FROM attachments WHERE state='ready'").Scan(&ready))
-		require.NoError(t, a.db.QueryRow("SELECT count(*) FROM attachments WHERE last_error='media_storage_limit'").Scan(&skipped))
-		assert.Equal(t, 2, ready)
-		assert.Equal(t, 1, skipped)
-		assert.EqualValues(t, 128, a.mediaBytes)
+	t.Run("large advertised sizes remain metadata", func(t *testing.T) {
+		a := openTestArchive(t, archiveConfig(t), []byte("x"))
+		event := documentEvent("advertised", "file", []byte("x"))
+		event.Message.DocumentMessage.FileLength = proto.Uint64(^uint64(0))
+		require.NoError(t, a.Record(t.Context(), event))
+		runNext(t, a)
+		var state, advertised string
+		var size int64
+		require.NoError(t, a.db.QueryRow("SELECT state, declared_size, size_bytes FROM attachments").Scan(&state, &advertised, &size))
+		assert.Equal(t, "ready", state)
+		assert.Equal(t, "18446744073709551615", advertised)
+		assert.EqualValues(t, 1, size)
 	})
-	t.Run("database quota survives replacement connection", func(t *testing.T) {
+	t.Run("database has no application page cap after reopen", func(t *testing.T) {
 		cfg := archiveConfig(t)
-		cfg.MaxDBBytes = 1 << 20
 		a := openTestArchive(t, cfg, nil)
-		a.db.SetMaxIdleConns(0)
-		var saveErr error
+		_, err := a.db.Exec("PRAGMA max_page_count=256") // Emulate a legacy 1 MiB cap.
+		require.NoError(t, err)
+		require.NoError(t, a.Close())
+		b := openTestArchive(t, cfg, nil)
+		b.db.SetMaxIdleConns(0)
+		var maxPages int64
+		require.NoError(t, b.db.QueryRow("PRAGMA max_page_count").Scan(&maxPages))
+		assert.Greater(t, maxPages, int64((256<<20)/4096))
 		for _, id := range []string{"one", "two", "three", "four"} {
 			msg := eventMessage(id)
 			msg.Message.Conversation = proto.String(strings.Repeat("x", 300000))
-			if saveErr = a.Record(t.Context(), msg); saveErr != nil {
-				break
-			}
+			require.NoError(t, b.Record(t.Context(), msg))
 		}
-		require.Error(t, saveErr)
 		info, err := os.Stat(filepath.Join(cfg.Dir, "archive.db"))
 		require.NoError(t, err)
-		assert.LessOrEqual(t, info.Size(), cfg.MaxDBBytes)
+		assert.Greater(t, info.Size(), int64(1<<20))
 	})
+}
+
+// Generate a large attachment without allocating it in memory.
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+func TestArchiveRequeuesLegacyLimitSkips(t *testing.T) {
+	cfg := archiveConfig(t)
+	a := openTestArchive(t, cfg, []byte("x"))
+	for _, reason := range []string{"file_size_limit", "media_storage_limit", "queue_full", "download_failed"} {
+		require.NoError(t, a.Record(t.Context(), documentEvent(reason, "file", []byte("x"))))
+		state := "skipped"
+		if reason == "download_failed" {
+			state = "failed"
+		}
+		_, err := a.db.Exec(`UPDATE attachments SET state=?, last_error=?, attempts=3, next_attempt=9223372036854775807
+			WHERE message_key=(SELECT key FROM messages WHERE message_id=?)`, state, reason, reason)
+		require.NoError(t, err)
+	}
+	require.NoError(t, a.Close())
+	b := openTestArchive(t, cfg, []byte("x"))
+	for range 3 {
+		job := runNext(t, b)
+		assert.Equal(t, 1, job.attempts, "old quota failures must not consume download attempts")
+	}
+	var ready, failed int
+	require.NoError(t, b.db.QueryRow("SELECT count(*) FROM attachments WHERE state='ready'").Scan(&ready))
+	require.NoError(t, b.db.QueryRow("SELECT count(*) FROM attachments WHERE state='failed' AND last_error='download_failed'").Scan(&failed))
+	assert.Equal(t, 3, ready)
+	assert.Equal(t, 1, failed)
+	require.NoError(t, b.Close())
+	c := openTestArchive(t, cfg, nil)
+	job, err := c.nextJob(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, job, "startup migration must not requeue completed downloads")
 }
 
 func TestArchiveRestartAndRetry(t *testing.T) {
@@ -263,7 +311,7 @@ func TestArchiveCancellationAndWriterLock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	_, err := Open(ctx, cfg, a.downloader)
-	require.Error(t, err, "a second process must not bypass media quota accounting")
+	require.Error(t, err, "a second process must not claim the same downloads")
 	started := make(chan struct{})
 	a.downloader = downloadFunc(func(ctx context.Context, _ whatsmeow.DownloadableMessage, _ whatsmeow.File) error {
 		close(started)
@@ -357,17 +405,8 @@ func TestArchiveMediaTypesAndRawMessages(t *testing.T) {
 
 func TestArchiveMetadataLimitsAndNames(t *testing.T) {
 	cfg := archiveConfig(t)
-	cfg.MaxFileBytes = 4
 	a := openTestArchive(t, cfg, nil)
-	msg := documentEvent("large-file", "file", []byte("too large"))
-	require.NoError(t, a.Record(t.Context(), msg))
-	job, err := a.nextJob(t.Context())
-	require.NoError(t, err)
-	assert.Nil(t, job)
-	var reason string
-	require.NoError(t, a.db.QueryRow("SELECT last_error FROM attachments").Scan(&reason))
-	assert.Equal(t, "file_size_limit", reason)
-	msg = eventMessage("large-message")
+	msg := eventMessage("large-message")
 	msg.Message.Conversation = proto.String(strings.Repeat("x", maxMessageBytes+1))
 	require.Error(t, a.Record(t.Context(), msg))
 	msg = eventMessage("")
@@ -385,25 +424,40 @@ func TestArchiveMetadataLimitsAndNames(t *testing.T) {
 	assert.Equal(t, "Friends", name)
 }
 
-func TestLimitedFileBounds(t *testing.T) {
-	f, err := os.CreateTemp(t.TempDir(), "bounded")
+func TestArchiveCancelledRecoveryPreservesCompletedFile(t *testing.T) {
+	data := []byte("completed attachment")
+	a := openTestArchive(t, archiveConfig(t), data)
+	require.NoError(t, a.Record(t.Context(), documentEvent("cancel-recovery", "file", data)))
+	job := runNext(t, a)
+	_, err := a.db.Exec("UPDATE attachments SET state='downloading'")
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, f.Close()) })
-	bounded := &limitedFile{file: f, limit: 8}
-	_, err = io.Copy(bounded, strings.NewReader("123456789"))
-	require.ErrorIs(t, err, errFileLimit)
-	_, err = bounded.WriteAt([]byte("x"), 8)
-	require.ErrorIs(t, err, errFileLimit)
-	_, err = bounded.WriteAt([]byte("x"), -1)
-	require.ErrorIs(t, err, errFileLimit)
-	require.ErrorIs(t, bounded.Truncate(9), errFileLimit)
-	_, err = bounded.Seek(100, io.SeekStart)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.NoError(t, a.processJob(ctx, job))
+	stored, err := a.root.ReadFile(job.path)
 	require.NoError(t, err)
-	_, err = bounded.Write([]byte("x"))
-	require.ErrorIs(t, err, errFileLimit)
-	info, err := bounded.Stat()
-	require.NoError(t, err)
-	assert.Zero(t, info.Size())
+	assert.Equal(t, data, stored)
+	var state string
+	require.NoError(t, a.db.QueryRow("SELECT state FROM attachments").Scan(&state))
+	assert.Equal(t, "retry", state)
+}
+
+func TestArchiveDiskFailureRemainsRetryable(t *testing.T) {
+	a := openTestArchive(t, archiveConfig(t), nil)
+	a.downloader = downloadFunc(func(_ context.Context, _ whatsmeow.DownloadableMessage, file whatsmeow.File) error {
+		if _, err := file.Write([]byte("partial")); err != nil {
+			return err
+		}
+		return syscall.ENOSPC
+	})
+	require.NoError(t, a.Record(t.Context(), documentEvent("disk-full", "file", []byte("attachment"))))
+	job := runNext(t, a)
+	var state, reason string
+	require.NoError(t, a.db.QueryRow("SELECT state, last_error FROM attachments").Scan(&state, &reason))
+	assert.Equal(t, "retry", state)
+	assert.Equal(t, "download_failed", reason)
+	assert.NoFileExists(t, filepath.Join(a.cfg.Dir, job.path))
+	assert.NoFileExists(t, filepath.Join(a.cfg.Dir, job.path+".part"))
 }
 
 func TestArchiveRetryLimit(t *testing.T) {

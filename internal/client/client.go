@@ -292,7 +292,7 @@ func (c *Client) Download(msg whatsmeow.DownloadableMessage) ([]byte, error) {
 	return c.whatsmeowClient.Download(context.Background(), msg)
 }
 
-// DownloadToFile downloads and decrypts an attachment through a bounded file supplied by the caller.
+// DownloadToFile streams and decrypts an attachment into the caller's file.
 func (c *Client) DownloadToFile(ctx context.Context, msg whatsmeow.DownloadableMessage, file whatsmeow.File) error {
 	return c.whatsmeowClient.DownloadToFile(ctx, msg, file)
 }
